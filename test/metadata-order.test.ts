@@ -7,8 +7,11 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
-import { MetadataOrderError, orderMetadataFiles } from "../scripts/shared.ts";
+import { loadMetadataDir, MetadataOrderError, orderMetadataFiles } from "../scripts/shared.ts";
 
 const DIR = "metadata";
 
@@ -115,5 +118,64 @@ describe("refusing to guess an order", () => {
     } catch (error) {
       assert.match((error as Error).message, /manifest\.json/);
     }
+  });
+});
+
+describe("loading a set from disk", () => {
+  /** A directory holding exactly the files named, contents keyed by name. */
+  function withFiles(files: Record<string, string>): string {
+    const dir = mkdtempSync(join(tmpdir(), "irdm-"));
+    for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body);
+    return dir;
+  }
+
+  it("reads the files in position order", () => {
+    const dir = withFiles({
+      "1.json": '{"name":"one"}',
+      "2.json": '{"name":"two"}',
+      "10.json": '{"name":"ten"}',
+      ...Object.fromEntries([3, 4, 5, 6, 7, 8, 9].map((n) => [`${n}.json`, `{"name":"n${n}"}`])),
+    });
+
+    const { entries } = loadMetadataDir(dir);
+
+    assert.equal(entries[0]?.name, "one");
+    assert.equal(entries[1]?.name, "two");
+    assert.equal(entries.at(-1)?.name, "ten");
+  });
+
+  it("ignores dotfiles, so a macOS AppleDouble copy is not a naming mistake", () => {
+    // "._1.json" is invisible in Finder and appears whenever a set is copied
+    // off a non-Mac drive. Before it was ignored it failed the build, either as
+    // a name that is not a position or as unparseable JSON.
+    const dir = withFiles({
+      "1.json": '{"name":"one"}',
+      "2.json": '{"name":"two"}',
+      "._1.json": "not json at all",
+      ".DS_Store": "",
+    });
+
+    const { entries } = loadMetadataDir(dir);
+
+    assert.equal(entries.length, 2);
+    assert.equal(entries[0]?.name, "one");
+  });
+
+  it("prefers an explicit manifest.json over numbered files", () => {
+    const dir = withFiles({
+      "manifest.json": '[{"name":"from the array"}]',
+      "1.json": '{"name":"ignored"}',
+    });
+
+    const { entries } = loadMetadataDir(dir);
+
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0]?.name, "from the array");
+  });
+
+  it("stops on a set whose order cannot be trusted", () => {
+    const dir = withFiles({ "1.json": "{}", "1.backup.json": "{}", "2.json": "{}" });
+
+    assert.throws(() => loadMetadataDir(dir), MetadataOrderError);
   });
 });

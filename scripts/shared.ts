@@ -144,7 +144,12 @@ export function loadMetadataDir(dir: string): LoadedMetadata {
     throw new Error(`Cannot read ${dir}. Put your metadata JSON files there, or pass --dir.`);
   }
 
-  const jsonFiles = names.filter((name) => name.toLowerCase().endsWith(".json"));
+  // Skip dotfiles. macOS leaves AppleDouble copies like "._1.json" next to the
+  // real files when a set is copied off a non-Mac drive, they are invisible in
+  // Finder, and they are never metadata.
+  const jsonFiles = names.filter(
+    (name) => !name.startsWith(".") && name.toLowerCase().endsWith(".json"),
+  );
   if (jsonFiles.length === 0) {
     throw new Error(
       `No .json files in ${dir}. Expected one file per token (1.json, 2.json, ...) or a single manifest.json.`,
