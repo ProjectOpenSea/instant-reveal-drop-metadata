@@ -13,8 +13,8 @@
  */
 
 import { config } from "../drop.config.ts";
-import { bytesToHex, buildPermutation, seedCommitment } from "../src/shuffle.ts";
 import { MANIFEST, MANIFEST_HASH } from "../src/generated/manifest.ts";
+import { buildPermutation, bytesToHex, seedCommitment } from "../src/shuffle.ts";
 import { DIM, info, RESET, warn } from "./shared.ts";
 
 try {
@@ -39,7 +39,9 @@ if (command === "new") {
   console.log("");
   console.log(`    1. put the seed in your environment, and nowhere else`);
   console.log(`         SHUFFLE_SEED=${seed}`);
-  console.log(`       ${DIM}locally in .env, in production: npx wrangler secret put SHUFFLE_SEED${RESET}`);
+  console.log(
+    `       ${DIM}locally in .env, in production: npx wrangler secret put SHUFFLE_SEED${RESET}`,
+  );
   console.log("");
   console.log("    2. put the commitment in drop.config.ts, and turn the shuffle on");
   console.log(`         shuffle: { enabled: true, commitment: "${commitment}" }`);
@@ -58,7 +60,7 @@ if (command !== "show") {
   process.exit(1);
 }
 
-const seed = process.env["SHUFFLE_SEED"];
+const seed = process.env.SHUFFLE_SEED;
 if (!seed) {
   console.error("\n  SHUFFLE_SEED is not set. Run `npm run seed:new` to make one.\n");
   process.exit(1);

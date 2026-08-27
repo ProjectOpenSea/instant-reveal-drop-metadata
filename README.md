@@ -193,6 +193,31 @@ server decided and why: `minted`, `unminted`, `reveal-all`, `reveal-none`,
 - [Large drops](docs/large-drops.md), over a few thousand tokens
 - [Troubleshooting](docs/troubleshooting.md)
 
+## Working on this
+
+CI runs one command, and it is the same one you run here, so the two cannot
+disagree about what passing means:
+
+```bash
+npm run ci
+```
+
+That is lint and format, typecheck, 61 tests, and the two checks below, in that
+order. The pieces run on their own too:
+
+```bash
+npm run lint          # biome, lint and format together (`lint:fix` applies)
+npm run typecheck
+npm test              # no network, no chain
+npm run check:worker  # the shared code still bundles for Cloudflare Workers
+npm run check:privacy # no unrevealed metadata staged or committed
+```
+
+`check:worker` matters because every test runs on Node. It is the only thing
+that notices when something under `src/` picks up an API Workers cannot provide,
+which would pass tests and typecheck and then fail on the recommended deploy
+target.
+
 ## Support
 
 A reference implementation, shared so creators and partners can run instant

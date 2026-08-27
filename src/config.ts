@@ -171,7 +171,7 @@ export function resolveConfig(input: DropConfig): ResolvedConfig {
     problems.push(`maxSupply must be a positive integer, got ${input.maxSupply}`);
   }
   if (!input.chain) {
-    problems.push("chain is required (for example \"base\" or \"ethereum\")");
+    problems.push('chain is required (for example "base" or "ethereum")');
   }
   if (input.reveal?.shuffle?.enabled && input.reveal.shuffle.commitment == null) {
     problems.push(

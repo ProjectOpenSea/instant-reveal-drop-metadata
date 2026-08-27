@@ -49,11 +49,7 @@ export async function handleWebhook(
   return { status: 404, body: { error: "not found" } };
 }
 
-async function handleAlchemy(
-  request: Request,
-  runtime: Runtime,
-  env: Env,
-): Promise<WebhookResult> {
+async function handleAlchemy(request: Request, runtime: Runtime, env: Env): Promise<WebhookResult> {
   const signingKey = env.ALCHEMY_WEBHOOK_SIGNING_KEY;
   if (!signingKey) {
     return {
@@ -93,11 +89,7 @@ async function handleAlchemy(
   };
 }
 
-async function handleGeneric(
-  request: Request,
-  runtime: Runtime,
-  env: Env,
-): Promise<WebhookResult> {
+async function handleGeneric(request: Request, runtime: Runtime, env: Env): Promise<WebhookResult> {
   const secret = env.WEBHOOK_SECRET;
   if (!secret) {
     return {
@@ -185,16 +177,16 @@ export function extractMintedTokenIds(payload: unknown, contract: string): numbe
     const record = node as Record<string, unknown>;
 
     // Shape 1: NFT activity and address activity entries.
-    if (typeof record["contractAddress"] === "string") {
-      if ((record["contractAddress"] as string).toLowerCase() === target) {
-        const tokenId = parseTokenId(record["erc721TokenId"]);
+    if (typeof record.contractAddress === "string") {
+      if ((record.contractAddress as string).toLowerCase() === target) {
+        const tokenId = parseTokenId(record.erc721TokenId);
         if (tokenId !== null) found.add(tokenId);
 
-        const erc1155 = record["erc1155Metadata"];
+        const erc1155 = record.erc1155Metadata;
         if (Array.isArray(erc1155)) {
           for (const entry of erc1155) {
             if (entry && typeof entry === "object") {
-              const parsed = parseTokenId((entry as Record<string, unknown>)["tokenId"]);
+              const parsed = parseTokenId((entry as Record<string, unknown>).tokenId);
               if (parsed !== null) found.add(parsed);
             }
           }
@@ -203,7 +195,7 @@ export function extractMintedTokenIds(payload: unknown, contract: string): numbe
     }
 
     // Shape 2: raw logs from a custom GraphQL webhook.
-    const topics = record["topics"];
+    const topics = record.topics;
     if (Array.isArray(topics) && topics.length === 4 && typeof topics[0] === "string") {
       const logAddress = logAddressOf(record);
       if (
@@ -224,12 +216,12 @@ export function extractMintedTokenIds(payload: unknown, contract: string): numbe
 }
 
 function logAddressOf(record: Record<string, unknown>): string | null {
-  const direct = record["address"];
+  const direct = record.address;
   if (typeof direct === "string") return direct.toLowerCase();
 
-  const account = record["account"];
+  const account = record.account;
   if (account && typeof account === "object") {
-    const nested = (account as Record<string, unknown>)["address"];
+    const nested = (account as Record<string, unknown>).address;
     if (typeof nested === "string") return nested.toLowerCase();
   }
   return null;

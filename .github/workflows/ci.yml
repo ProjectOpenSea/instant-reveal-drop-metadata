@@ -5,23 +5,30 @@ on:
     branches: [main]
   pull_request:
 
+# Nothing here writes to the repository.
+permissions:
+  contents: read
+
+# A new push supersedes the run in flight for the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  check:
+  ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          # Falls through to engines.node, so the supported version is written
+          # down once, in package.json, and CI cannot drift from it.
+          node-version-file: package.json
+          cache: npm
 
       - run: npm ci
 
-      - name: no unrevealed metadata in git
-        run: npm run check:privacy
-
-      - name: typecheck
-        run: npm run typecheck
-
-      - name: test
-        run: npm test
+      # One command, and the same one contributors run locally, so the two
+      # cannot disagree about what passing means.
+      - run: npm run ci

@@ -13,7 +13,7 @@
 
 import type { ResolvedConfig, TokenMetadata } from "../config.ts";
 import type { Env } from "../env.ts";
-import { renderPath, type MetadataSource } from "./index.ts";
+import { type MetadataSource, renderPath } from "./index.ts";
 
 export function createR2Source(config: ResolvedConfig, env: Env): MetadataSource {
   const bucket = env.METADATA_BUCKET;

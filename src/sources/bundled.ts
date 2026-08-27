@@ -9,8 +9,8 @@
  * tells you if you are close.
  */
 
-import type { MetadataSource } from "./index.ts";
 import { MANIFEST, MANIFEST_BUILT_AT, MANIFEST_HASH } from "../generated/manifest.ts";
+import type { MetadataSource } from "./index.ts";
 
 export function createBundledSource(): MetadataSource {
   return {

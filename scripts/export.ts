@@ -15,7 +15,7 @@
  * exactly what the server has been serving all along.
  */
 
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "../drop.config.ts";
 import { resolveConfig } from "../src/config.ts";
@@ -43,7 +43,7 @@ if (entries.length < resolved.maxSupply) {
 
 let permutation: number[] | null = null;
 if (resolved.reveal.shuffle.enabled) {
-  const seed = process.env["SHUFFLE_SEED"];
+  const seed = process.env.SHUFFLE_SEED;
   if (!seed) {
     console.error(
       "\n  shuffle is on but SHUFFLE_SEED is not set. Exporting without it would produce " +
@@ -96,7 +96,7 @@ for (let position = 0; position < resolved.maxSupply; position++) {
     }
   }
 
-  const json = JSON.stringify(body, null, 2) + "\n";
+  const json = `${JSON.stringify(body, null, 2)}\n`;
   writeFileSync(join(outDir, String(tokenId)), json);
   written += 1;
   bytes += Buffer.byteLength(json);
@@ -104,7 +104,7 @@ for (let position = 0; position < resolved.maxSupply; position++) {
 
 writeFileSync(
   join(outDir, "provenance.json"),
-  JSON.stringify(
+  `${JSON.stringify(
     {
       contract: resolved.contract,
       chain: resolved.chain,
@@ -117,14 +117,14 @@ writeFileSync(
             commitment: resolved.reveal.shuffle.commitment,
             // The seed is left out unless you ask for it, because this file is
             // about to be pinned publicly and forever.
-            seed: hasFlag("include-seed") ? (process.env["SHUFFLE_SEED"] ?? null) : null,
+            seed: hasFlag("include-seed") ? (process.env.SHUFFLE_SEED ?? null) : null,
           }
         : { enabled: false },
       exportedAt: new Date().toISOString(),
     },
     null,
     2,
-  ) + "\n",
+  )}\n`,
 );
 
 ok(`wrote ${written} token files, ${formatBytes(bytes)} total`);

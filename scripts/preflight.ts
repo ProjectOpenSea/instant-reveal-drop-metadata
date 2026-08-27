@@ -11,20 +11,20 @@
 import { config } from "../drop.config.ts";
 import { resolveRpcUrl } from "../src/chains.ts";
 import { resolveConfig } from "../src/config.ts";
+import { MANIFEST } from "../src/generated/manifest.ts";
 import {
-  ERC721_INTERFACE_ID,
-  RevertError,
-  RpcClient,
-  SELECTORS,
-  encodeUint256,
   decodeAddress,
   decodeString,
+  ERC721_INTERFACE_ID,
+  encodeUint256,
+  RevertError,
+  RpcClient,
   readString,
   readSupportsInterface,
   readTokenExists,
   readTotalSupply,
+  SELECTORS,
 } from "../src/rpc.ts";
-import { MANIFEST } from "../src/generated/manifest.ts";
 import { arg, DIM, fail, info, ok, RESET, warn } from "./shared.ts";
 
 try {
@@ -40,13 +40,13 @@ const bad = (message: string) => {
 };
 
 const resolved = resolveConfig(config);
-const rpcUrl = resolveRpcUrl(resolved.chain, process.env["RPC_URL"]);
+const rpcUrl = resolveRpcUrl(resolved.chain, process.env.RPC_URL);
 const client = new RpcClient({ url: rpcUrl, timeoutMs: 10_000 });
 const serverUrl = arg("url")?.replace(/\/+$/, "");
 
 console.log(`\n  drop      ${resolved.contract} on ${resolved.chain}`);
 console.log(`  rpc       ${new URL(rpcUrl).host}`);
-if (!process.env["RPC_URL"]) {
+if (!process.env.RPC_URL) {
   console.log(`  ${DIM}using a shared public endpoint, set RPC_URL for a real mint${RESET}`);
 }
 console.log("\n  contract\n");
@@ -190,7 +190,7 @@ if (resolved.metadata.source === "bundled") {
 }
 
 if (resolved.reveal.shuffle.enabled) {
-  if (!process.env["SHUFFLE_SEED"]) {
+  if (!process.env.SHUFFLE_SEED) {
     warn("shuffle is on but SHUFFLE_SEED is not set here, so this check cannot verify the mapping");
   } else {
     ok("shuffle is on and SHUFFLE_SEED is set");

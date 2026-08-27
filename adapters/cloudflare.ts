@@ -27,10 +27,14 @@ export default {
 
     if (initError) {
       return new Response(
-        JSON.stringify({ error: "configuration problem", detail: initError.message }, null, 2) + "\n",
+        JSON.stringify({ error: "configuration problem", detail: initError.message }, null, 2) +
+          "\n",
         {
           status: 500,
-          headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          },
         },
       );
     }

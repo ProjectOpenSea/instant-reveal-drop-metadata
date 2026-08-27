@@ -19,9 +19,14 @@
     "refresh": "node scripts/refresh-opensea.ts",
     "test": "node --test \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "check:privacy": "node scripts/check-privacy.ts"
+    "check:privacy": "node scripts/check-privacy.ts",
+    "check:worker": "node scripts/check-worker.ts",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "ci": "npm run lint && npm run typecheck && npm test && npm run check:privacy && npm run check:worker"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.3.14",
     "@types/node": "^24.3.0",
     "typescript": "^5.9.2"
   },

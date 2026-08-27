@@ -6,8 +6,8 @@
  * record at a marketplace.
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { handleRequest } from "../src/handler.ts";
 import { createKvRevealStore } from "../src/reveal-store.ts";
 import { get, makeBrokenStore, makeFakeKv, makeRuntime } from "./helpers.ts";
@@ -153,7 +153,10 @@ describe("an rpc endpoint that fails mid-mint", () => {
     const unknown = await handleRequest(get("/9"), runtime);
 
     assert.equal(unknown.headers.get("x-reveal-state"), "rpc-unavailable");
-    assert.equal(unknown.headers.get("cache-control"), "public, max-age=0, s-maxage=0, must-revalidate");
+    assert.equal(
+      unknown.headers.get("cache-control"),
+      "public, max-age=0, s-maxage=0, must-revalidate",
+    );
   });
 
   it("backs off instead of retrying on every request", async () => {

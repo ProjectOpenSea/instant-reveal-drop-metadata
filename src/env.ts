@@ -73,13 +73,13 @@ export function envFlag(value: string | undefined): boolean {
  */
 export function envFromRecord(source: Record<string, string | undefined>): Env {
   return {
-    RPC_URL: source["RPC_URL"],
-    SHUFFLE_SEED: source["SHUFFLE_SEED"],
-    PUBLISH_SEED: source["PUBLISH_SEED"],
-    REVEAL_ALL: source["REVEAL_ALL"],
-    ALCHEMY_WEBHOOK_SIGNING_KEY: source["ALCHEMY_WEBHOOK_SIGNING_KEY"],
-    WEBHOOK_SECRET: source["WEBHOOK_SECRET"],
-    METADATA_HTTP_BASE_URL: source["METADATA_HTTP_BASE_URL"],
-    METADATA_HTTP_AUTHORIZATION: source["METADATA_HTTP_AUTHORIZATION"],
+    RPC_URL: source.RPC_URL,
+    SHUFFLE_SEED: source.SHUFFLE_SEED,
+    PUBLISH_SEED: source.PUBLISH_SEED,
+    REVEAL_ALL: source.REVEAL_ALL,
+    ALCHEMY_WEBHOOK_SIGNING_KEY: source.ALCHEMY_WEBHOOK_SIGNING_KEY,
+    WEBHOOK_SECRET: source.WEBHOOK_SECRET,
+    METADATA_HTTP_BASE_URL: source.METADATA_HTTP_BASE_URL,
+    METADATA_HTTP_AUTHORIZATION: source.METADATA_HTTP_AUTHORIZATION,
   };
 }

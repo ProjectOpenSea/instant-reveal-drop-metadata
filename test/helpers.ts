@@ -5,8 +5,8 @@
 import type { DropConfig } from "../src/config.ts";
 import type { Env } from "../src/env.ts";
 import type { KvLike, RevealStore } from "../src/reveal-store.ts";
-import { createRuntime, type Runtime } from "../src/runtime.ts";
 import type { FetchLike } from "../src/rpc.ts";
+import { createRuntime, type Runtime } from "../src/runtime.ts";
 
 export const CONTRACT = "0x1111111111111111111111111111111111111111";
 export const RPC_URL = "https://rpc.test/v2/key";
@@ -69,14 +69,17 @@ export function makeFakeFetch(chain: FakeChain): FetchLike {
         const selector = call.data.slice(0, 10);
 
         if (selector === "0x18160ddd") {
-          return jsonResponse({ jsonrpc: "2.0", id: body.id, result: hexWord(chain.totalSupply) }, 200);
+          return jsonResponse(
+            { jsonrpc: "2.0", id: body.id, result: hexWord(chain.totalSupply) },
+            200,
+          );
         }
         if (selector === "0x6352211e") {
-          const tokenId = Number(BigInt("0x" + call.data.slice(10)));
+          const tokenId = Number(BigInt(`0x${call.data.slice(10)}`));
           const minted = tokenId >= 1 && tokenId <= chain.totalSupply;
           return minted
             ? jsonResponse(
-                { jsonrpc: "2.0", id: body.id, result: "0x" + "22".padStart(64, "0") },
+                { jsonrpc: "2.0", id: body.id, result: `0x${"22".padStart(64, "0")}` },
                 200,
               )
             : jsonResponse(
@@ -114,12 +117,14 @@ export function makeFakeFetch(chain: FakeChain): FetchLike {
   };
 }
 
-export function makeRuntime(options: {
-  config?: Partial<DropConfig>;
-  env?: Partial<Env>;
-  chain?: Partial<FakeChain>;
-  store?: RevealStore;
-} = {}): { runtime: Runtime; chain: FakeChain } {
+export function makeRuntime(
+  options: {
+    config?: Partial<DropConfig>;
+    env?: Partial<Env>;
+    chain?: Partial<FakeChain>;
+    store?: RevealStore;
+  } = {},
+): { runtime: Runtime; chain: FakeChain } {
   const chain: FakeChain = {
     totalSupply: 0,
     down: false,
@@ -150,7 +155,7 @@ export function get(path: string): Request {
 }
 
 function hexWord(value: number): string {
-  return "0x" + value.toString(16).padStart(64, "0");
+  return `0x${value.toString(16).padStart(64, "0")}`;
 }
 
 function jsonResponse(body: unknown, status: number): Response {

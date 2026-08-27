@@ -11,10 +11,10 @@
  * Run it again any time your metadata changes, and redeploy afterwards.
  */
 
-import { gzipSync } from "node:zlib";
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { config } from "../drop.config.ts";
 import { canonicalJson, manifestHash } from "../src/shuffle.ts";
 import { arg, fail, formatBytes, info, loadMetadataDir, ok, warn } from "./shared.ts";
@@ -114,7 +114,8 @@ console.log("");
 function installPreCommitHook(): void {
   // Ask git where hooks live rather than assuming .git/hooks, which is wrong in
   // a worktree and wrong again when core.hooksPath is set.
-  const hooksDir = git(["config", "--get", "core.hooksPath"]) ?? git(["rev-parse", "--git-path", "hooks"]);
+  const hooksDir =
+    git(["config", "--get", "core.hooksPath"]) ?? git(["rev-parse", "--git-path", "hooks"]);
   if (!hooksDir || !existsSync(hooksDir)) return;
 
   const hook = join(hooksDir, "pre-commit");
@@ -134,7 +135,10 @@ exec node scripts/check-privacy.ts
 
 function git(args: string[]): string | null {
   try {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
+    return (
+      execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() ||
+      null
+    );
   } catch {
     return null;
   }

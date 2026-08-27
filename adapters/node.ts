@@ -17,7 +17,7 @@ import { config } from "../drop.config.ts";
 import { ConfigError } from "../src/config.ts";
 import { envFromRecord } from "../src/env.ts";
 import { handleRequest } from "../src/handler.ts";
-import { createRuntime, rpcHost, type Runtime } from "../src/runtime.ts";
+import { createRuntime, type Runtime, rpcHost } from "../src/runtime.ts";
 
 // .env is optional. Node reads it natively, no dependency needed.
 try {
@@ -26,8 +26,8 @@ try {
   // No .env file. Perfectly normal.
 }
 
-const port = Number(process.env["PORT"] ?? 8787);
-const quiet = process.env["QUIET"] === "true";
+const port = Number(process.env.PORT ?? 8787);
+const quiet = process.env.QUIET === "true";
 
 let runtime: Runtime;
 try {
@@ -50,8 +50,12 @@ server.listen(port, () => {
   console.log("  instant reveal metadata server");
   console.log(`  listening on          ${base}`);
   console.log(`  contract              ${runtime.config.contract} on ${runtime.config.chain}`);
-  console.log(`  token ids             ${runtime.config.tokenIdStart} to ${runtime.config.tokenIdEnd}`);
-  console.log(`  reveal mode           ${runtime.revealAll ? "always (REVEAL_ALL is set)" : runtime.config.reveal.mode}`);
+  console.log(
+    `  token ids             ${runtime.config.tokenIdStart} to ${runtime.config.tokenIdEnd}`,
+  );
+  console.log(
+    `  reveal mode           ${runtime.revealAll ? "always (REVEAL_ALL is set)" : runtime.config.reveal.mode}`,
+  );
   console.log(`  metadata source       ${runtime.source.describe()}`);
   console.log(`  rpc                   ${rpcHost(runtime.rpcUrl)}`);
   console.log("");
@@ -83,7 +87,7 @@ async function serve(incoming: IncomingMessage, response: ServerResponse): Promi
     result = await handleRequest(new Request(url, { method, headers, body }), runtime);
   } catch (error) {
     console.error("unhandled error", error);
-    result = new Response(JSON.stringify({ error: "internal error" }) + "\n", {
+    result = new Response(`${JSON.stringify({ error: "internal error" })}\n`, {
       status: 500,
       headers: { "content-type": "application/json", "cache-control": "no-store" },
     });
