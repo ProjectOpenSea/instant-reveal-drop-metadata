@@ -13,11 +13,11 @@
 
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { config } from "../drop.config.ts";
 import { canonicalJson, manifestHash } from "../src/shuffle.ts";
-import { arg, fail, formatBytes, info, loadMetadataDir, ok, warn } from "./shared.ts";
+import { arg, die, fail, formatBytes, info, loadMetadataDir, ok, warn } from "./shared.ts";
 
 const OUTPUT = "src/generated/manifest.ts";
 // Cloudflare's compressed worker size limit is 3 MB on the free plan.
@@ -27,7 +27,7 @@ const dir = arg("dir", "metadata") as string;
 
 console.log(`\n  building a manifest from ${dir}\n`);
 
-const { entries } = loadMetadataDir(dir);
+const { entries, files } = loadMetadataSet(dir);
 const hash = await manifestHash(entries);
 
 if (entries.length !== config.maxSupply) {
@@ -98,10 +98,20 @@ if (gzipBytes > FREE_PLAN_LIMIT) {
 installPreCommitHook();
 
 console.log("");
+// Say out loud which file became which position. The order is the one thing
+// here that cannot be corrected after a mint, so it is worth a glance.
+const first = files[0];
+const last = files.at(-1);
+if (first && last && files.length > 1) {
+  const lastTokenId = config.tokenIdStart + entries.length - 1;
+  info(
+    config.reveal.shuffle.enabled
+      ? `the set runs ${basename(first)} to ${basename(last)}; the seed decides which token gets which`
+      : `${basename(first)} is token ${config.tokenIdStart}, ${basename(last)} is token ${lastTokenId}`,
+  );
+}
 if (config.reveal.shuffle.enabled) {
   info("shuffle is on, so publish this manifest hash and your seed commitment before minting");
-} else {
-  info("shuffle is off, so token 1 gets the first file above, token 2 the second, and so on");
 }
 console.log("");
 
@@ -141,5 +151,14 @@ function git(args: string[]): string | null {
     );
   } catch {
     return null;
+  }
+}
+
+/** Load the set, or print what is wrong with it and stop. */
+function loadMetadataSet(from: string) {
+  try {
+    return loadMetadataDir(from);
+  } catch (error) {
+    die(error);
   }
 }

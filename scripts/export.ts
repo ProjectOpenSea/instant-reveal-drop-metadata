@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { config } from "../drop.config.ts";
 import { resolveConfig } from "../src/config.ts";
 import { buildPermutation, manifestHash, seedCommitment } from "../src/shuffle.ts";
-import { arg, formatBytes, hasFlag, info, loadMetadataDir, ok, warn } from "./shared.ts";
+import { arg, die, formatBytes, hasFlag, info, loadMetadataDir, ok, warn } from "./shared.ts";
 
 try {
   process.loadEnvFile();
@@ -32,7 +32,7 @@ const resolved = resolveConfig(config);
 const dir = arg("dir", "metadata") as string;
 const outDir = arg("out", "out") as string;
 
-const { entries } = loadMetadataDir(dir);
+const { entries } = loadMetadataSet(dir);
 const hash = await manifestHash(entries);
 
 console.log(`\n  exporting ${resolved.maxSupply} tokens from ${dir} to ${outDir}/\n`);
@@ -148,3 +148,12 @@ console.log(`      --rpc-url $RPC_URL --private-key $KEY`);
 console.log("");
 console.log("  check a token resolves through a gateway before you switch the server off.");
 console.log("");
+
+/** Load the set, or print what is wrong with it and stop. */
+function loadMetadataSet(from: string) {
+  try {
+    return loadMetadataDir(from);
+  } catch (error) {
+    die(error);
+  }
+}
