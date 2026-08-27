@@ -195,12 +195,13 @@ server decided and why: `minted`, `unminted`, `reveal-all`, `reveal-none`,
 
 ## Working on this
 
-CI runs these on Node 22.18 and 24, and they all run locally:
+CI runs these on the Node version in `engines`, current LTS, and latest. They
+all run locally too:
 
 ```bash
 npm test              # 61 tests, no network
 npm run typecheck
-npm run format:check  # prettier, code only, docs are hand wrapped
+npm run lint          # biome, lint and format together (`lint:fix` to apply)
 npm run check:worker  # the shared code still bundles for Cloudflare Workers
 npm run check:privacy # no unrevealed metadata staged or committed
 ```

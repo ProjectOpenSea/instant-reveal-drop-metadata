@@ -1,8 +1,0 @@
-package-lock.json
-src/generated/manifest.ts
-metadata/
-out/
-
-# The docs are hand wrapped at 80 characters and the tables read better narrow.
-# Prettier only pads table cells here, so it costs churn and buys nothing.
-*.md

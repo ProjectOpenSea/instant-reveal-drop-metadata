@@ -1,0 +1,50 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  // .gitignore already excludes metadata/, out/ and node_modules, so reuse it
+  // rather than keeping a second copy of the same list in here.
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!src/generated/manifest.ts"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "complexity": {
+        // Env vars and untrusted JSON payloads are read with bracket access
+        // throughout, deliberately and consistently. Turning ~22 of those into
+        // dot access would be churn for style alone.
+        "useLiteralKeys": "off"
+      },
+      "style": {
+        // "0x" + hex reads better than a template in the ABI decoding, and the
+        // codebase is consistent about it.
+        "useTemplate": "off"
+      }
+    }
+  },
+  // Import order is meaningful to read here and churns badly when sorted.
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
+  }
+}

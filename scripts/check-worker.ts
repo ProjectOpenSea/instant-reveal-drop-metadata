@@ -42,7 +42,8 @@ if (result.status !== 0) {
 
 // Wrangler colours its output, so the word WARNING sits against an escape
 // sequence and never starts on a word boundary. Strip the escapes first.
-const plain = output.replace(/\[[0-9;]*m/g, "");
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching the escape character is the point
+const plain = output.replace(/\u001b\[[0-9;]*m/g, "");
 const warnings = plain
   .split("\n")
   .filter((line) => line.includes("[WARNING]"))

@@ -15,19 +15,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # package.json is the only place a Node version is written down. Reading the
+  # floor out of `engines` here means bumping that field is enough, and the
+  # matrix cannot quietly drift from the range we promise to support.
+  versions:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.read.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: read
+        run: |
+          set -euo pipefail
+          # Takes the first version in the range, so ">=22.18.0" and
+          # ">=22.18.0 <25" both give 22.18.0. Fails loudly rather than
+          # testing some other version by accident.
+          floor=$(jq -er '.engines.node | capture("(?<v>[0-9]+(\\.[0-9]+)*)").v' package.json)
+          echo "engines floor: $floor"
+          # The floor we promise, the release most people run, and the newest,
+          # since running TypeScript without a flag is still changing.
+          echo "matrix=[\"$floor\", \"lts/*\", \"current\"]" >> "$GITHUB_OUTPUT"
+
   check:
+    needs: versions
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # The floor from package.json engines, where Node started running
-        # TypeScript without a flag, and current. The whole repo depends on
-        # that behaviour, so it is worth testing both ends.
-        node: ["22.18", "24"]
+        node: ${{ fromJSON(needs.versions.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -37,8 +57,8 @@ jobs:
       - name: no unrevealed metadata in git
         run: npm run check:privacy
 
-      - name: format
-        run: npm run format:check
+      - name: lint and format
+        run: npm run lint
 
       - name: typecheck
         run: npm run typecheck
@@ -51,11 +71,11 @@ jobs:
     # shared code under src/ picks up an API Cloudflare Workers cannot provide.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: lts/*
           cache: npm
 
       - run: npm ci
