@@ -12,8 +12,9 @@
  */
 
 import { gzipSync } from "node:zlib";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { config } from "../drop.config.ts";
 import { canonicalJson, manifestHash } from "../src/shuffle.ts";
 import { arg, fail, formatBytes, info, loadMetadataDir, ok, warn } from "./shared.ts";
@@ -94,6 +95,8 @@ if (gzipBytes > FREE_PLAN_LIMIT) {
   );
 }
 
+installPreCommitHook();
+
 console.log("");
 if (config.reveal.shuffle.enabled) {
   info("shuffle is on, so publish this manifest hash and your seed commitment before minting");
@@ -101,3 +104,38 @@ if (config.reveal.shuffle.enabled) {
   info("shuffle is off, so token 1 gets the first file above, token 2 the second, and so on");
 }
 console.log("");
+
+/**
+ * This file now holds the artwork nobody is supposed to see yet, and the most
+ * common way it leaks is a `git add -A` into a public fork. Leave a pre-commit
+ * hook behind that refuses that commit. Never overwrites a hook you already
+ * have, and `git commit --no-verify` still bypasses it.
+ */
+function installPreCommitHook(): void {
+  // Ask git where hooks live rather than assuming .git/hooks, which is wrong in
+  // a worktree and wrong again when core.hooksPath is set.
+  const hooksDir = git(["config", "--get", "core.hooksPath"]) ?? git(["rev-parse", "--git-path", "hooks"]);
+  if (!hooksDir || !existsSync(hooksDir)) return;
+
+  const hook = join(hooksDir, "pre-commit");
+  if (existsSync(hook)) return;
+
+  writeFileSync(
+    hook,
+    `#!/bin/sh
+# Installed by \`npm run build:manifest\`. Blocks a commit that would put your
+# unrevealed metadata into git history. See scripts/check-privacy.ts.
+exec node scripts/check-privacy.ts
+`,
+  );
+  chmodSync(hook, 0o755);
+  info(`installed ${hook}, so a commit cannot leak your metadata`);
+}
+
+function git(args: string[]): string | null {
+  try {
+    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
+  } catch {
+    return null;
+  }
+}

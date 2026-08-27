@@ -23,12 +23,11 @@ npm run build:manifest
 
 The files are read in numeric order, and that order is what token IDs map to.
 With `tokenIdStart: 1` and the shuffle off, `1.json` is token 1, `2.json` is
-token 2, and so on.
+token 2, and so on. With the shuffle on, position still comes from this order and
+the seed decides which position each token ID lands on.
 
-With the shuffle on, position still comes from this order, and the seed decides
-which position each token ID lands on. Either way, renaming files between builds
-changes which artwork a token gets, so settle on an order before you publish
-anything.
+Either way, renaming files between builds changes which artwork a token gets, so
+settle on an order before publishing anything.
 
 ## What goes in a file
 
@@ -51,19 +50,23 @@ Full field reference: https://docs.opensea.io/docs/metadata-standards
 ## Where your images should live
 
 On IPFS, pinned, exactly as normal. Images are fine to make public before the
-mint, because an image on its own does not tell anyone which token ID it belongs
-to. It is the mapping this server withholds, not the artwork.
+mint: an image alone does not say which token ID it belongs to. The server
+withholds the mapping, not the artwork.
 
 If your metadata files use relative image paths, set `metadata.imageBaseUri` in
 `drop.config.ts` and the server will prefix them.
 
 ## This directory is gitignored
 
-Deliberately. `metadata/*` is excluded so your unrevealed set does not end up in
-a public repository. `npm run build:manifest` writes it into
-`src/generated/manifest.ts`, which is not ignored, so if you push your copy of
-this repo anywhere public, either keep that repo private or use
-`metadata.source: "r2"` instead. See `docs/security.md`.
+Deliberately, so your unrevealed set does not end up in a public repository.
+
+`npm run build:manifest` copies the same data into `src/generated/manifest.ts`,
+which cannot be ignored because the deployment needs it. So that file is guarded
+instead: `npm run check:privacy` fails if it is staged or committed with entries
+in it, it runs in CI, and `build:manifest` installs it as a pre-commit hook. Use
+`metadata.source: "r2"` to keep metadata out of git entirely, or
+`ALLOW_METADATA_IN_GIT=1` if your repository is private and staying that way. See
+`docs/security.md`.
 
 `metadata/example/` holds four sample files for trying things out:
 

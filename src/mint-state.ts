@@ -59,6 +59,13 @@ export type MintStateStatus = {
 const BLOCK_NUMBER_TTL_MS = 6_000;
 const NEGATIVE_CACHE_LIMIT = 20_000;
 
+/**
+ * How long to wait before retrying an RPC endpoint that just failed. Without
+ * this, every request retries a dead endpoint back to back for as long as the
+ * outage lasts, which turns a slow endpoint into a hammered one.
+ */
+const RPC_FAILURE_COOLDOWN_MS = 2_000;
+
 export class MintStateReader {
   private readonly config: ResolvedConfig;
   private readonly client: RpcClient;
@@ -79,6 +86,13 @@ export class MintStateReader {
   private lastWebhookAtMs: number | null = null;
   private webhookMints = 0;
   private lastError: string | null = null;
+  private lastFailureAtMs: number | null = null;
+  /**
+   * Whether the most recent read failed. A flag rather than a comparison of two
+   * timestamps, because a success and a failure inside the same millisecond
+   * would make that comparison answer "healthy".
+   */
+  private lastReadFailed = false;
 
   constructor(config: ResolvedConfig, client: RpcClient, store: RevealStore) {
     this.config = config;
@@ -99,9 +113,11 @@ export class MintStateReader {
         this.config.mintState.mode === "sequential"
           ? await this.isMintedSequential(tokenId)
           : await this.isMintedByOwnerOf(tokenId);
-      return minted
-        ? { revealed: true, reason: "minted" }
-        : { revealed: false, reason: "unminted" };
+      if (minted) return { revealed: true, reason: "minted" };
+      // A "no" that rests on a failed read is not the same answer as a "no" from
+      // a healthy chain, even though both withhold the token. Say which it is,
+      // because /status and the troubleshooting docs lean on this header.
+      return { revealed: false, reason: this.lastReadFailed ? "rpc-unavailable" : "unminted" };
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error);
       return { revealed: false, reason: "rpc-unavailable" };
@@ -137,12 +153,20 @@ export class MintStateReader {
       if (this.highWaterTokenId === null || highest > this.highWaterTokenId) {
         this.highWaterTokenId = highest;
       }
-      await this.store.bumpHighWater(highest);
+      // The local bump above is what reveals the token. Sharing it with the
+      // other instances is an optimisation, so a store that is down must not
+      // turn a good delivery into a 500 the provider will retry.
+      await this.shareHighWater(highest);
       this.lastWebhookAtMs = Date.now();
       this.webhookMints += applied;
     }
 
     return applied;
+  }
+
+  /** Surface a failure raised outside this class, so /status reports it too. */
+  recordError(message: string): void {
+    this.lastError = message;
   }
 
   status(): MintStateStatus {
@@ -170,7 +194,7 @@ export class MintStateReader {
     if (this.highWaterTokenId !== null && tokenId <= this.highWaterTokenId) return true;
 
     // A webhook may have landed on another instance since our last poll.
-    const shared = await this.store.getHighWater();
+    const shared = await this.readSharedHighWater();
     if (shared !== null && (this.highWaterTokenId === null || shared > this.highWaterTokenId)) {
       this.highWaterTokenId = shared;
       if (tokenId <= shared) return true;
@@ -184,9 +208,30 @@ export class MintStateReader {
     return this.highWaterTokenId !== null && tokenId <= this.highWaterTokenId;
   }
 
+  private async readSharedHighWater(): Promise<number | null> {
+    try {
+      return await this.store.getHighWater();
+    } catch (error) {
+      this.lastError = `reveal store read failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+      return null;
+    }
+  }
+
   private async refreshSupply(): Promise<void> {
     // Single flight: a burst of requests triggers one RPC call, not hundreds.
     if (this.supplyRefresh) return this.supplyRefresh;
+
+    // Back off from an endpoint that just failed, rather than retrying it once
+    // per request for the length of the outage.
+    if (
+      this.lastFailureAtMs !== null &&
+      Date.now() - this.lastFailureAtMs < RPC_FAILURE_COOLDOWN_MS &&
+      this.highWaterTokenId !== null
+    ) {
+      return;
+    }
 
     const run = (async () => {
       try {
@@ -196,12 +241,16 @@ export class MintStateReader {
         this.lastTotalSupply = total;
         this.lastPollAtMs = Date.now();
         this.lastError = null;
+        this.lastFailureAtMs = null;
+        this.lastReadFailed = false;
         if (this.highWaterTokenId === null || highest > this.highWaterTokenId) {
           this.highWaterTokenId = highest;
-          if (highest >= this.config.tokenIdStart) await this.store.bumpHighWater(highest);
+          if (highest >= this.config.tokenIdStart) await this.shareHighWater(highest);
         }
       } catch (error) {
         this.lastError = error instanceof Error ? error.message : String(error);
+        this.lastFailureAtMs = Date.now();
+        this.lastReadFailed = true;
         // Keep whatever we already knew. If we knew nothing, the caller sees
         // "not minted" and serves the placeholder, which is the safe answer.
         if (this.highWaterTokenId === null) {
@@ -214,6 +263,21 @@ export class MintStateReader {
 
     this.supplyRefresh = run;
     return run;
+  }
+
+  /**
+   * Publish the high water mark to the shared store. Failures are recorded and
+   * swallowed: the local mark is already correct, the poller will try again,
+   * and no reveal depends on this succeeding.
+   */
+  private async shareHighWater(tokenId: number): Promise<void> {
+    try {
+      await this.store.bumpHighWater(tokenId);
+    } catch (error) {
+      this.lastError = `reveal store write failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+    }
   }
 
   // --- ownerOf -----------------------------------------------------------
@@ -240,7 +304,13 @@ export class MintStateReader {
         }
         this.lastPollAtMs = Date.now();
         this.lastError = null;
+        this.lastFailureAtMs = null;
+        this.lastReadFailed = false;
         return exists;
+      } catch (error) {
+        this.lastFailureAtMs = Date.now();
+        this.lastReadFailed = true;
+        throw error;
       } finally {
         this.inflightTokenChecks.delete(tokenId);
       }

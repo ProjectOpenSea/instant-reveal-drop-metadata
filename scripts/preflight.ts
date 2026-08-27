@@ -13,6 +13,7 @@ import { resolveRpcUrl } from "../src/chains.ts";
 import { resolveConfig } from "../src/config.ts";
 import {
   ERC721_INTERFACE_ID,
+  RevertError,
   RpcClient,
   SELECTORS,
   encodeUint256,
@@ -59,18 +60,22 @@ try {
   bad(`rpc unreachable: ${(error as Error).message}`);
 }
 
-if (await readSupportsInterface(client, resolved.contract, ERC721_INTERFACE_ID)) {
-  ok("contract reports ERC-721 support");
-} else {
-  bad("contract does not report ERC-721 support. Is the address right, and on this chain?");
+try {
+  if (await readSupportsInterface(client, resolved.contract, ERC721_INTERFACE_ID)) {
+    ok("contract reports ERC-721 support");
+  } else {
+    bad("contract does not report ERC-721 support. Is the address right, and on this chain?");
+  }
+} catch (error) {
+  bad(`could not read the contract: ${(error as Error).message}`);
 }
 
 try {
   const name = await readString(client, resolved.contract, SELECTORS.name);
   const symbol = await readString(client, resolved.contract, SELECTORS.symbol);
   ok(`name and symbol: ${name} (${symbol})`);
-} catch {
-  warn("could not read name() and symbol()");
+} catch (error) {
+  warn(`could not read name() and symbol(): ${describe(error)}`);
 }
 
 try {
@@ -83,8 +88,12 @@ try {
         `${resolved.maxSupply.toLocaleString("en-US")}. Fix the config, or tokens will 404.`,
     );
   }
-} catch {
-  warn("contract has no maxSupply(), so the token range could not be cross-checked");
+} catch (error) {
+  warn(
+    error instanceof RevertError
+      ? "contract has no maxSupply(), so the token range could not be cross-checked"
+      : `maxSupply() could not be read: ${describe(error)}`,
+  );
 }
 
 try {
@@ -98,14 +107,18 @@ try {
 }
 
 if (totalSupply > 0) {
-  const exists = await readTokenExists(client, resolved.contract, resolved.tokenIdStart);
-  if (exists) {
-    ok(`token ${resolved.tokenIdStart} exists, so tokenIdStart looks right`);
-  } else {
-    bad(
-      `token ${resolved.tokenIdStart} does not exist even though totalSupply is ${totalSupply}. ` +
-        `tokenIdStart is probably wrong.`,
-    );
+  try {
+    const exists = await readTokenExists(client, resolved.contract, resolved.tokenIdStart);
+    if (exists) {
+      ok(`token ${resolved.tokenIdStart} exists, so tokenIdStart looks right`);
+    } else {
+      bad(
+        `token ${resolved.tokenIdStart} does not exist even though totalSupply is ${totalSupply}. ` +
+          `tokenIdStart is probably wrong.`,
+      );
+    }
+  } catch (error) {
+    warn(`ownerOf(${resolved.tokenIdStart}) could not be read: ${(error as Error).message}`);
   }
 }
 
@@ -123,8 +136,12 @@ try {
   } else {
     ok(`baseURI ends in a slash, so tokenURI appends the token ID: ${baseUri}`);
   }
-} catch {
-  warn("contract has no baseURI() getter, so this could not be checked");
+} catch (error) {
+  warn(
+    error instanceof RevertError
+      ? "contract has no baseURI() getter, so this could not be checked"
+      : `baseURI() could not be read: ${describe(error)}`,
+  );
 }
 
 if (serverUrl && baseUri) {
@@ -196,6 +213,11 @@ if (failures === 0) {
   process.exit(1);
 }
 
+/** A contract that does not have a getter is a different problem to a dead RPC. */
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function checkServer(base: string, minted: number): Promise<void> {
   try {
     const status = await fetch(`${base}/status`);
@@ -213,7 +235,8 @@ async function checkServer(base: string, minted: number): Promise<void> {
   // A token that is definitely minted should be revealed and cacheable forever.
   if (minted > 0) {
     const tokenId = resolved.tokenIdStart + minted - 1;
-    const response = await fetch(`${base}/${tokenId}`);
+    const response = await tryFetch(`${base}/${tokenId}`);
+    if (!response) return;
     const cacheControl = response.headers.get("cache-control") ?? "";
     const state = response.headers.get("x-reveal-state") ?? "";
     if (state === "minted" || state === "reveal-all") {
@@ -237,7 +260,8 @@ async function checkServer(base: string, minted: number): Promise<void> {
   // be cached by anything.
   const unmintedId = resolved.tokenIdStart + minted;
   if (unmintedId <= resolved.tokenIdEnd) {
-    const response = await fetch(`${base}/${unmintedId}`);
+    const response = await tryFetch(`${base}/${unmintedId}`);
+    if (!response) return;
     const cacheControl = response.headers.get("cache-control") ?? "";
     const state = response.headers.get("x-reveal-state") ?? "";
     if (state === "unminted") {
@@ -259,10 +283,20 @@ async function checkServer(base: string, minted: number): Promise<void> {
     info("the drop is fully minted, so there is no unminted token to test against");
   }
 
-  const outOfRange = await fetch(`${base}/${resolved.tokenIdEnd + 1}`);
+  const outOfRange = await tryFetch(`${base}/${resolved.tokenIdEnd + 1}`);
+  if (!outOfRange) return;
   if (outOfRange.status === 404) {
     ok(`token ${resolved.tokenIdEnd + 1} is outside the drop and 404s`);
   } else {
     warn(`token ${resolved.tokenIdEnd + 1} returned ${outOfRange.status}, expected 404`);
+  }
+}
+
+async function tryFetch(url: string): Promise<Response | null> {
+  try {
+    return await fetch(url);
+  } catch (error) {
+    bad(`could not reach ${url}: ${(error as Error).message}`);
+    return null;
   }
 }

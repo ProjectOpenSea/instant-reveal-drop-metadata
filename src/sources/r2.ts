@@ -5,7 +5,7 @@
  * metadata never sat in git. R2 buckets are private by default, so nothing is
  * readable except through this server.
  *
- * Setup is in `docs/deploy-cloudflare.md`, and comes down to:
+ * Setup is in `docs/large-drops.md`, and comes down to:
  *   npx wrangler r2 bucket create my-drop-metadata
  *   npx wrangler r2 object put my-drop-metadata/0.json --file metadata/0.json
  * plus the binding already present in wrangler.toml.

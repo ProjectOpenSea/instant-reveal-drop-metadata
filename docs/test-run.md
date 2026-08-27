@@ -1,21 +1,19 @@
 # Doing a test run first
 
-Worth an hour before a real mint. You end up having watched a token go from
-hidden to revealed, which is the only way to be sure the whole chain of pieces
-lines up.
+Worth an hour before a real mint. Watching a token go from hidden to revealed is
+the only way to be sure every piece lines up.
 
-Nothing here needs a hosting account. The server runs on your machine and is
-exposed through a Cloudflare quick tunnel, which needs no login.
+Nothing here needs a hosting account. The server runs on your machine, exposed
+through a Cloudflare quick tunnel.
 
 ## What you need
 
-A test drop you control. Either a small drop on a testnet, or a small cheap drop
-on mainnet that you do not mind existing. What matters is that you own the
-contract, so you can call `setBaseURI`, and that it has not minted out.
+A test drop you control, on a testnet or a cheap mainnet one you do not mind
+existing. What matters is that you own the contract, so you can call
+`setBaseURI`, and that it has not minted out.
 
-You also want the drop left unrevealed in OpenSea Studio, which is the normal
-state before a reveal: `baseURI` set to a single placeholder URI with no trailing
-slash.
+Leave it unrevealed in OpenSea Studio, the normal pre-reveal state: `baseURI` set
+to a single placeholder URI with no trailing slash.
 
 ## 1. Point the config at your test drop
 
@@ -31,8 +29,7 @@ maxSupply: 10,
 
 ## 2. Make some metadata
 
-Real metadata if you have it. Otherwise the four sample files in
-`metadata/example/` are enough to see the mechanism work:
+Real metadata if you have it, otherwise the four samples in `metadata/example/`:
 
 ```bash
 npm run build:manifest -- --dir metadata/example
@@ -48,9 +45,8 @@ export RPC_URL="https://base-sepolia.g.alchemy.com/v2/YOUR_KEY"
 npm run preflight
 ```
 
-Read what it prints. It tells you the current `totalSupply`, whether
-`maxSupply` matches your config, which wallet owns the contract, and what
-`baseURI` is set to right now.
+It prints the current `totalSupply`, whether `maxSupply` matches your config,
+which wallet owns the contract, and the current `baseURI`.
 
 ## 4. Run the server and expose it
 
@@ -71,9 +67,9 @@ through it:
 npm run preflight -- --url https://....trycloudflare.com
 ```
 
-You want the two lines about cache headers and the two about reveal state to all
-say ok. If a token that is minted onchain reads as unminted, or the other way
-round, stop here and fix that before touching the contract.
+The two cache header lines and the two reveal state lines should all say ok. If a
+minted token reads as unminted, or the reverse, fix that before touching the
+contract.
 
 ## 5. Point the contract at the tunnel
 
@@ -90,8 +86,8 @@ Confirm the contract agrees:
 cast call 0xYourTestDrop "tokenURI(uint256)(string)" 1 --rpc-url $RPC_URL
 ```
 
-That should print your tunnel URL with `1` on the end. If it prints the URL
-without the `1`, the trailing slash is missing.
+That should print your tunnel URL with `1` on the end. Without the `1`, the
+trailing slash is missing.
 
 ## 6. Mint, and watch
 
@@ -121,9 +117,8 @@ Token 6, still unminted, should be the placeholder with `max-age=0`.
 ## 7. Check what OpenSea shows
 
 OpenSea reads `tokenURI` when it indexes the mint, so a freshly minted token
-normally arrives already revealed. If you turned the server on partway through a
-mint, tokens minted before that were indexed against the placeholder and need a
-nudge:
+arrives already revealed. Tokens minted before you turned the server on were
+indexed against the placeholder and need a nudge:
 
 ```bash
 OPENSEA_API_KEY=... npm run refresh -- --from 1 --to 10
@@ -133,8 +128,8 @@ Refreshes are queued rather than instant.
 
 ## 8. Optional, try the webhook
 
-This is the difference between a reveal in ten seconds and a reveal in one. You
-can fake a delivery to see the path work, without setting up a provider:
+The difference between a reveal in ten seconds and one in a second. Fake a
+delivery to see the path work, without setting up a provider:
 
 ```bash
 # restart the server with a secret set
@@ -149,17 +144,17 @@ curl -X POST https://....trycloudflare.com/webhook/mint \
 curl -sI https://....trycloudflare.com/7 | grep -i x-reveal-state
 ```
 
-Token 7 reads as `minted` immediately, without the server asking the chain
-anything. For a real Alchemy webhook, see [webhooks.md](webhooks.md).
+Token 7 reads as `minted` immediately, without the server asking the chain. For a
+real Alchemy webhook see [webhooks.md](webhooks.md).
 
-Remember that a webhook can only bring a reveal forward, so a test delivery for a
-token that has not really minted stays revealed until you restart the server.
-Only do that on a test drop.
+A webhook can only bring a reveal forward, so a test delivery for a token that
+has not really minted stays revealed until you restart the server. Only do this
+on a test drop.
 
 ## 9. Put the test drop back
 
-If it is a mainnet test drop you want to keep tidy, set `baseURI` back to
-whatever it was, or to the real IPFS directory:
+To keep a mainnet test drop tidy, set `baseURI` back to whatever it was, or to
+the real IPFS directory:
 
 ```bash
 cast send 0xYourTestDrop "setBaseURI(string)" "ipfs://<cid>/" \
@@ -168,17 +163,16 @@ cast send 0xYourTestDrop "setBaseURI(string)" "ipfs://<cid>/" \
 
 ## Things that will trip you up
 
-The trailing slash. Without it, every token returns the same URI and nothing
+The trailing slash. Without it every token returns the same URI and nothing
 reveals. Preflight warns about it.
 
-A tunnel URL that changed. Quick tunnels get a new hostname every time you start
-one, and the contract is still pointing at the old one. Either re-run
-`setBaseURI` or use a real deployment.
+A tunnel URL that changed. Quick tunnels get a new hostname each time, and the
+contract still points at the old one. Re-run `setBaseURI` or use a real
+deployment.
 
 A metadata set smaller than the drop. Tokens past the end of your set mint and
-then sit on the placeholder forever, reported as `metadata-missing` in the
-`x-reveal-state` header and as a problem at `/status`.
+then sit on the placeholder forever, reported as `metadata-missing` in
+`x-reveal-state` and as a problem at `/status`.
 
-A cold start. The first request after the server starts pays for one RPC round
-trip, which can be a second or two. Every request after that is served from
-memory until the TTL expires.
+A cold start. The first request after the server starts pays one RPC round trip,
+a second or two. Everything after that comes from memory until the TTL expires.

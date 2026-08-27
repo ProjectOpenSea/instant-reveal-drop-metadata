@@ -16,6 +16,7 @@
  */
 
 import { config } from "../drop.config.ts";
+import { openseaChainSlug } from "../src/chains.ts";
 import { arg, fail, info, ok } from "./shared.ts";
 
 try {
@@ -39,14 +40,16 @@ if (!Number.isInteger(from) || !Number.isInteger(to) || to < from) {
   process.exit(1);
 }
 
-console.log(`\n  refreshing tokens ${from} to ${to} on ${config.chain}\n`);
+const slug = openseaChainSlug(config.chain);
+
+console.log(`\n  refreshing tokens ${from} to ${to} on ${slug}\n`);
 
 let refreshed = 0;
 let failed = 0;
 
 for (let tokenId = from; tokenId <= to; tokenId++) {
   const url =
-    `https://api.opensea.io/api/v2/chain/${config.chain}/contract/` +
+    `https://api.opensea.io/api/v2/chain/${slug}/contract/` +
     `${config.contract}/nfts/${tokenId}/refresh`;
 
   try {

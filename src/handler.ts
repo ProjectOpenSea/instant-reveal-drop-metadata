@@ -55,13 +55,38 @@ export async function handleRequest(request: Request, runtime: Runtime): Promise
     return json({ error: "method not allowed" }, { status: 405, cacheControl: "no-store" });
   }
 
-  const response = await route(path, runtime, url);
+  const response = await routeSafely(path, runtime, url);
 
   // A HEAD response carries the headers of the GET it stands in for, no body.
   if (request.method === "HEAD") {
     return new Response(null, { status: response.status, headers: response.headers });
   }
   return response;
+}
+
+/**
+ * Nothing reaching a caller should be an unhandled throw. A metadata source can
+ * fail (a bad gateway from the http source, unparseable JSON in a bucket), and
+ * the safe answer to that is the same as the safe answer to an unreachable
+ * chain: serve the placeholder, refuse to let anything cache it, and say so in
+ * the header. A 500 would leave a marketplace recording a broken token.
+ */
+async function routeSafely(path: string, runtime: Runtime, url: URL): Promise<Response> {
+  try {
+    return await route(path, runtime, url);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    runtime.mintState.recordError(detail);
+
+    const tokenId = tokenIdFromPath(path);
+    if (tokenId !== null && runtime.builder.inRange(tokenId)) {
+      return tokenResponse(runtime.builder.placeholder(tokenId), {
+        state: "error",
+        cacheControl: "no-store",
+      });
+    }
+    return json({ error: "internal error", detail }, { status: 500, cacheControl: "no-store" });
+  }
 }
 
 async function route(path: string, runtime: Runtime, url: URL): Promise<Response> {
@@ -84,15 +109,22 @@ async function route(path: string, runtime: Runtime, url: URL): Promise<Response
         : json({ error: "no contract level metadata configured" }, { status: 404, cacheControl: "public, max-age=60" });
   }
 
-  // Anything else is a token request. We read the last path segment so the
-  // server works whether your baseURI is https://host/ or https://host/meta/.
-  const lastSegment = path.slice(path.lastIndexOf("/") + 1);
-  const match = TOKEN_PATH.exec(lastSegment);
-  if (!match) {
+  // Anything else is a token request.
+  const tokenId = tokenIdFromPath(path);
+  if (tokenId === null) {
     return json({ error: "not found" }, { status: 404, cacheControl: "public, max-age=60" });
   }
 
-  return serveToken(Number(match[1]), runtime);
+  return serveToken(tokenId, runtime);
+}
+
+/**
+ * The last path segment, so the server works whether your baseURI is
+ * https://host/ or https://host/meta/.
+ */
+function tokenIdFromPath(path: string): number | null {
+  const match = TOKEN_PATH.exec(path.slice(path.lastIndexOf("/") + 1));
+  return match ? Number(match[1]) : null;
 }
 
 async function serveToken(tokenId: number, runtime: Runtime): Promise<Response> {
