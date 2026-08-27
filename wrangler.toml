@@ -1,0 +1,27 @@
+name = "instant-reveal-drop-metadata"
+main = "adapters/cloudflare.ts"
+compatibility_date = "2026-08-01"
+workers_dev = true
+
+# Secrets are not set here. Use the CLI, so they never land in git:
+#   npx wrangler secret put RPC_URL
+#   npx wrangler secret put SHUFFLE_SEED                 (only with the shuffle on)
+#   npx wrangler secret put ALCHEMY_WEBHOOK_SIGNING_KEY   (only with a webhook)
+#   npx wrangler secret put WEBHOOK_SECRET                (only with a webhook)
+
+# Optional. Share mint progress across every instance of the worker, so a
+# webhook that arrives at one of them reveals the token everywhere at once.
+# Create it with `npx wrangler kv namespace create REVEAL_STATE` and paste the
+# id it prints.
+#
+# [[kv_namespaces]]
+# binding = "REVEAL_STATE"
+# id = "paste-the-id-here"
+
+# Optional. Only needed with metadata.source "r2", for a set too large to
+# bundle into the deployment.
+#   npx wrangler r2 bucket create my-drop-metadata
+#
+# [[r2_buckets]]
+# binding = "METADATA_BUCKET"
+# bucket_name = "my-drop-metadata"

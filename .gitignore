@@ -1,0 +1,15 @@
+node_modules/
+.env
+.env.local
+.dev.vars
+.wrangler/
+.vercel/
+out/
+*.log
+.DS_Store
+
+# Your finished metadata. Nothing here should ever be committed to a public repo:
+# the whole point of this server is that unminted metadata stays private.
+metadata/*
+!metadata/README.md
+!metadata/example/

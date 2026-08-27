@@ -1,0 +1,39 @@
+{
+  "name": "instant-reveal-drop-metadata",
+  "version": "1.0.0",
+  "description": "A self-hosted metadata server that reveals each NFT the moment it mints, without exposing unminted tokens.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build:manifest": "node scripts/build-manifest.ts",
+    "dev": "node adapters/node.ts",
+    "dev:cf": "npx wrangler dev",
+    "deploy": "npx wrangler deploy",
+    "preflight": "node scripts/preflight.ts",
+    "seed:new": "node scripts/seed.ts new",
+    "seed:show": "node scripts/seed.ts show",
+    "export": "node scripts/export.ts",
+    "refresh": "node scripts/refresh-opensea.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  },
+  "keywords": [
+    "nft",
+    "metadata",
+    "seadrop",
+    "opensea",
+    "instant-reveal",
+    "erc721"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ProjectOpenSea/instant-reveal-drop-metadata.git"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Example #4",
+  "description": "A sample metadata file, so you can try the server before your own art is ready.",
+  "image": "ipfs://bafybeiexampleexampleexampleexampleexampleexampleexample/4.png",
+  "attributes": [
+    { "trait_type": "Background", "value": "Void" },
+    { "trait_type": "Eyes", "value": "Closed" },
+    { "trait_type": "Rarity", "value": "Legendary" }
+  ]
+}
