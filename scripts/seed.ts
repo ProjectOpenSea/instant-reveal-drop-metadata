@@ -39,7 +39,9 @@ if (command === "new") {
   console.log("");
   console.log(`    1. put the seed in your environment, and nowhere else`);
   console.log(`         SHUFFLE_SEED=${seed}`);
-  console.log(`       ${DIM}locally in .env, in production: npx wrangler secret put SHUFFLE_SEED${RESET}`);
+  console.log(
+    `       ${DIM}locally in .env, in production: npx wrangler secret put SHUFFLE_SEED${RESET}`,
+  );
   console.log("");
   console.log("    2. put the commitment in drop.config.ts, and turn the shuffle on");
   console.log(`         shuffle: { enabled: true, commitment: "${commitment}" }`);

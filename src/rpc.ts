@@ -155,7 +155,8 @@ function hexWordToBigInt(clean: string, what: string): bigint {
 
 export function decodeUint256(hex: string): bigint {
   const clean = hex.replace(/^0x/, "");
-  if (clean.length === 0) throw new RpcTransportError("empty return data where a number was expected");
+  if (clean.length === 0)
+    throw new RpcTransportError("empty return data where a number was expected");
   return hexWordToBigInt(clean.slice(0, 64), "a number");
 }
 

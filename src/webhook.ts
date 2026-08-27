@@ -49,11 +49,7 @@ export async function handleWebhook(
   return { status: 404, body: { error: "not found" } };
 }
 
-async function handleAlchemy(
-  request: Request,
-  runtime: Runtime,
-  env: Env,
-): Promise<WebhookResult> {
+async function handleAlchemy(request: Request, runtime: Runtime, env: Env): Promise<WebhookResult> {
   const signingKey = env.ALCHEMY_WEBHOOK_SIGNING_KEY;
   if (!signingKey) {
     return {
@@ -93,11 +89,7 @@ async function handleAlchemy(
   };
 }
 
-async function handleGeneric(
-  request: Request,
-  runtime: Runtime,
-  env: Env,
-): Promise<WebhookResult> {
+async function handleGeneric(request: Request, runtime: Runtime, env: Env): Promise<WebhookResult> {
   const secret = env.WEBHOOK_SECRET;
   if (!secret) {
     return {

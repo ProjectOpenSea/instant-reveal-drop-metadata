@@ -96,7 +96,11 @@ async function route(path: string, runtime: Runtime, url: URL): Promise<Response
     case "/health":
       return new Response("ok\n", {
         status: 200,
-        headers: { ...CORS_HEADERS, "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+        headers: {
+          ...CORS_HEADERS,
+          "content-type": "text/plain; charset=utf-8",
+          "cache-control": "no-store",
+        },
       });
     case "/status":
       return json(await statusBody(runtime), { cacheControl: "no-store" });
@@ -106,7 +110,10 @@ async function route(path: string, runtime: Runtime, url: URL): Promise<Response
     case "/contract.json":
       return runtime.config.contractMetadata
         ? json(runtime.config.contractMetadata, { cacheControl: "public, max-age=300" })
-        : json({ error: "no contract level metadata configured" }, { status: 404, cacheControl: "public, max-age=60" });
+        : json(
+            { error: "no contract level metadata configured" },
+            { status: 404, cacheControl: "public, max-age=60" },
+          );
   }
 
   // Anything else is a token request.
@@ -216,7 +223,9 @@ async function statusBody(runtime: Runtime): Promise<Record<string, unknown>> {
   const problems: string[] = [];
   if (!source.ready()) problems.push(source.describe());
   if (mapping.shuffle === "missing-seed") {
-    problems.push("reveal.shuffle is enabled but SHUFFLE_SEED is not set, so nothing can be revealed");
+    problems.push(
+      "reveal.shuffle is enabled but SHUFFLE_SEED is not set, so nothing can be revealed",
+    );
   }
 
   // A source that knows its own size can be checked against the drop. Coming up

@@ -69,7 +69,10 @@ export function makeFakeFetch(chain: FakeChain): FetchLike {
         const selector = call.data.slice(0, 10);
 
         if (selector === "0x18160ddd") {
-          return jsonResponse({ jsonrpc: "2.0", id: body.id, result: hexWord(chain.totalSupply) }, 200);
+          return jsonResponse(
+            { jsonrpc: "2.0", id: body.id, result: hexWord(chain.totalSupply) },
+            200,
+          );
         }
         if (selector === "0x6352211e") {
           const tokenId = Number(BigInt("0x" + call.data.slice(10)));
@@ -114,12 +117,14 @@ export function makeFakeFetch(chain: FakeChain): FetchLike {
   };
 }
 
-export function makeRuntime(options: {
-  config?: Partial<DropConfig>;
-  env?: Partial<Env>;
-  chain?: Partial<FakeChain>;
-  store?: RevealStore;
-} = {}): { runtime: Runtime; chain: FakeChain } {
+export function makeRuntime(
+  options: {
+    config?: Partial<DropConfig>;
+    env?: Partial<Env>;
+    chain?: Partial<FakeChain>;
+    store?: RevealStore;
+  } = {},
+): { runtime: Runtime; chain: FakeChain } {
   const chain: FakeChain = {
     totalSupply: 0,
     down: false,

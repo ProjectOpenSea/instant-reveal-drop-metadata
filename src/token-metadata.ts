@@ -109,8 +109,7 @@ export class TokenMetadataBuilder {
 function fillTemplates(value: TokenMetadata, tokenId: number): TokenMetadata {
   const out: TokenMetadata = {};
   for (const [key, raw] of Object.entries(value)) {
-    out[key] =
-      typeof raw === "string" ? raw.replaceAll("{tokenId}", String(tokenId)) : raw;
+    out[key] = typeof raw === "string" ? raw.replaceAll("{tokenId}", String(tokenId)) : raw;
   }
   return out;
 }

@@ -21,12 +21,7 @@
 
 import type { ResolvedConfig } from "./config.ts";
 import type { RevealStore } from "./reveal-store.ts";
-import {
-  RpcClient,
-  RpcTransportError,
-  readTokenExists,
-  readTotalSupply,
-} from "./rpc.ts";
+import { RpcClient, RpcTransportError, readTokenExists, readTotalSupply } from "./rpc.ts";
 
 export type RevealReason =
   /** The token is minted, here is the real metadata. */

@@ -10,11 +10,7 @@ import { resolveConfig, type DropConfig, type ResolvedConfig } from "./config.ts
 import { envFlag, type Env } from "./env.ts";
 import { resolveRpcUrl } from "./chains.ts";
 import { MintStateReader } from "./mint-state.ts";
-import {
-  createKvRevealStore,
-  createMemoryRevealStore,
-  type RevealStore,
-} from "./reveal-store.ts";
+import { createKvRevealStore, createMemoryRevealStore, type RevealStore } from "./reveal-store.ts";
 import { RpcClient, type FetchLike } from "./rpc.ts";
 import { createMetadataSource, type MetadataSource } from "./sources/index.ts";
 import { MANIFEST_HASH } from "./generated/manifest.ts";

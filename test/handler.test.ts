@@ -32,7 +32,10 @@ describe("serving a token", () => {
       config: { mintState: { mode: "sequential", ttlSeconds: 0 } },
     });
 
-    assert.equal((await handleRequest(get("/4"), runtime)).headers.get("x-reveal-state"), "unminted");
+    assert.equal(
+      (await handleRequest(get("/4"), runtime)).headers.get("x-reveal-state"),
+      "unminted",
+    );
 
     chain.totalSupply = 4;
 
@@ -43,7 +46,9 @@ describe("serving a token", () => {
     const { runtime } = makeRuntime({ chain: { totalSupply: 5 } });
 
     const plain = (await (await handleRequest(get("/2"), runtime)).json()) as { name: string };
-    const suffixed = (await (await handleRequest(get("/2.json"), runtime)).json()) as { name: string };
+    const suffixed = (await (await handleRequest(get("/2.json"), runtime)).json()) as {
+      name: string;
+    };
 
     assert.deepEqual(plain, suffixed);
   });
@@ -106,7 +111,8 @@ describe("cache headers", () => {
     // and the token looks broken until the entry expires.
     const { runtime } = makeRuntime({ chain: { totalSupply: 5 } });
 
-    const cacheControl = (await handleRequest(get("/6"), runtime)).headers.get("cache-control") ?? "";
+    const cacheControl =
+      (await handleRequest(get("/6"), runtime)).headers.get("cache-control") ?? "";
 
     assert.match(cacheControl, /max-age=0/);
     assert.match(cacheControl, /s-maxage=0/);

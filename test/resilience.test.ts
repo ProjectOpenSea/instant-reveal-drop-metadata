@@ -153,7 +153,10 @@ describe("an rpc endpoint that fails mid-mint", () => {
     const unknown = await handleRequest(get("/9"), runtime);
 
     assert.equal(unknown.headers.get("x-reveal-state"), "rpc-unavailable");
-    assert.equal(unknown.headers.get("cache-control"), "public, max-age=0, s-maxage=0, must-revalidate");
+    assert.equal(
+      unknown.headers.get("cache-control"),
+      "public, max-age=0, s-maxage=0, must-revalidate",
+    );
   });
 
   it("backs off instead of retrying on every request", async () => {

@@ -80,8 +80,7 @@ export const config: DropConfig = {
   // these strings. Every token shows this until it mints.
   placeholder: {
     name: "Unrevealed #{tokenId}",
-    description:
-      "This one has not been minted yet. Artwork appears here the moment it is.",
+    description: "This one has not been minted yet. Artwork appears here the moment it is.",
     image: "ipfs://REPLACE_WITH_YOUR_PLACEHOLDER_IMAGE_CID",
     attributes: [],
   },

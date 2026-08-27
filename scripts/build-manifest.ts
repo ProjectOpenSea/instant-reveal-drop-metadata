@@ -114,7 +114,8 @@ console.log("");
 function installPreCommitHook(): void {
   // Ask git where hooks live rather than assuming .git/hooks, which is wrong in
   // a worktree and wrong again when core.hooksPath is set.
-  const hooksDir = git(["config", "--get", "core.hooksPath"]) ?? git(["rev-parse", "--git-path", "hooks"]);
+  const hooksDir =
+    git(["config", "--get", "core.hooksPath"]) ?? git(["rev-parse", "--git-path", "hooks"]);
   if (!hooksDir || !existsSync(hooksDir)) return;
 
   const hook = join(hooksDir, "pre-commit");
@@ -134,7 +135,10 @@ exec node scripts/check-privacy.ts
 
 function git(args: string[]): string | null {
   try {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
+    return (
+      execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() ||
+      null
+    );
   } catch {
     return null;
   }

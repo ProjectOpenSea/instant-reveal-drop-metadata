@@ -55,9 +55,7 @@ describe("the shuffle", () => {
     // version and a new config flag.
     const permutation = await buildPermutation("instant-reveal-golden-seed", 16);
 
-    assert.deepEqual(permutation, [
-      2, 4, 7, 0, 15, 14, 3, 6, 9, 8, 11, 13, 12, 10, 1, 5,
-    ]);
+    assert.deepEqual(permutation, [2, 4, 7, 0, 15, 14, 3, 6, 9, 8, 11, 13, 12, 10, 1, 5]);
   });
 });
 
@@ -89,10 +87,7 @@ describe("provenance hashes", () => {
   });
 
   it("canonicalises nested structures", () => {
-    assert.equal(
-      canonicalJson({ b: 1, a: [{ d: 2, c: 3 }] }),
-      '{"a":[{"c":3,"d":2}],"b":1}',
-    );
+    assert.equal(canonicalJson({ b: 1, a: [{ d: 2, c: 3 }] }), '{"a":[{"c":3,"d":2}],"b":1}');
   });
 
   it("hashes the way every other sha256 implementation does", async () => {

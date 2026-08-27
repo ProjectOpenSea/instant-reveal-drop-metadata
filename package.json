@@ -19,10 +19,14 @@
     "refresh": "node scripts/refresh-opensea.ts",
     "test": "node --test \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "check:privacy": "node scripts/check-privacy.ts"
+    "check:privacy": "node scripts/check-privacy.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:worker": "node scripts/check-worker.ts"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "prettier": "3.6.2",
     "typescript": "^5.9.2"
   },
   "keywords": [

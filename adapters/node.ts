@@ -50,8 +50,12 @@ server.listen(port, () => {
   console.log("  instant reveal metadata server");
   console.log(`  listening on          ${base}`);
   console.log(`  contract              ${runtime.config.contract} on ${runtime.config.chain}`);
-  console.log(`  token ids             ${runtime.config.tokenIdStart} to ${runtime.config.tokenIdEnd}`);
-  console.log(`  reveal mode           ${runtime.revealAll ? "always (REVEAL_ALL is set)" : runtime.config.reveal.mode}`);
+  console.log(
+    `  token ids             ${runtime.config.tokenIdStart} to ${runtime.config.tokenIdEnd}`,
+  );
+  console.log(
+    `  reveal mode           ${runtime.revealAll ? "always (REVEAL_ALL is set)" : runtime.config.reveal.mode}`,
+  );
   console.log(`  metadata source       ${runtime.source.describe()}`);
   console.log(`  rpc                   ${rpcHost(runtime.rpcUrl)}`);
   console.log("");

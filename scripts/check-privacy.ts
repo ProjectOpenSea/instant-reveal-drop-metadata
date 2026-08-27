@@ -29,7 +29,10 @@ if (process.env["ALLOW_METADATA_IN_GIT"] === "1") {
 /** What git holds for a path, or null if git cannot answer. */
 function gitShow(ref: string): string | null {
   try {
-    return execFileSync("git", ["show", ref], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    return execFileSync("git", ["show", ref], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
   } catch {
     return null;
   }
