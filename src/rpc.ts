@@ -153,10 +153,18 @@ function hexWordToBigInt(clean: string, what: string): bigint {
   return BigInt(`0x${clean}`);
 }
 
+/**
+ * A uint256 is exactly one 32-byte word. Anything shorter is not a number this
+ * endpoint returned, it is a truncated or empty response, and reading the first
+ * few characters of one as a value is how a garbled reply becomes a wrong
+ * answer: `0x01` would decode to 1, and `readTokenExists` would then report an
+ * unminted token as minted. Short data has to fail, so the caller fails closed.
+ */
 export function decodeUint256(hex: string): bigint {
   const clean = hex.replace(/^0x/, "");
   if (clean.length === 0)
     throw new RpcTransportError("empty return data where a number was expected");
+  if (clean.length < 64) throw new RpcTransportError("return data too short for a number");
   return hexWordToBigInt(clean.slice(0, 64), "a number");
 }
 
@@ -184,7 +192,7 @@ export function decodeString(hex: string): string {
 
 export function decodeBool(hex: string): boolean {
   const clean = hex.replace(/^0x/, "");
-  if (clean.length === 0) return false;
+  if (clean.length < 64) return false;
   return hexWordToBigInt(clean.slice(0, 64), "a boolean") !== 0n;
 }
 
@@ -209,13 +217,26 @@ export async function readTokenExists(
   tokenId: number,
   blockTag?: string,
 ): Promise<boolean> {
+  let result: string;
   try {
-    const result = await client.call(contract, encodeUint256(SELECTORS.ownerOf, tokenId), blockTag);
-    return decodeUint256(result) !== 0n;
+    result = await client.call(contract, encodeUint256(SELECTORS.ownerOf, tokenId), blockTag);
   } catch (error) {
     if (error instanceof RevertError) return false;
     throw error;
   }
+
+  // Not every endpoint reports a reverted eth_call as a JSON-RPC error. Some
+  // answer 0x with no error at all, which for `ownerOf` means the same thing:
+  // the token does not exist. Treating that as a transport failure instead
+  // would mark the endpoint unhealthy on every unminted token, which is most of
+  // them before a drop mints out.
+  if (isEmptyReturnData(result)) return false;
+
+  return decodeUint256(result) !== 0n;
+}
+
+function isEmptyReturnData(hex: string): boolean {
+  return hex.replace(/^0x/, "").length === 0;
 }
 
 export async function readString(

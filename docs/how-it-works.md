@@ -57,6 +57,16 @@ an unminted one. Use it if your contract can mint IDs out of order, for example 
 custom mint function or an airdrop of high IDs. It costs one call per token, and
 positive answers are cached permanently because a minted token never unmints.
 
+One call per token also means one inbound request can become one RPC call, so
+anything that walks your token range once, a scraper or a marketplace reindexing
+the collection, spends your RPC budget at whatever rate it likes. At most 64 of
+those reads run at a time; past that the server answers without asking the chain,
+which withholds the token and sets `x-reveal-state: throttled`. A late reveal is
+the right side to be wrong on. `/status` counts them under
+`mintState.throttledChecks`, separately from errors, because declining a read is
+a decision rather than a fault. `sequential` mode never reaches this, since one
+read answers every token.
+
 Both modes keep a high water mark that only rises. A burn lowers `totalSupply`,
 and RPC providers behind a load balancer sometimes answer from an older block, so
 without that rule a token could flip back to unrevealed after being revealed.
@@ -86,7 +96,7 @@ scheme safe against reorgs and easy to verify afterwards.
 | Response | `Cache-Control` |
 | --- | --- |
 | Revealed token | `public, max-age=31536000, s-maxage=31536000, immutable` |
-| Unrevealed token | `public, max-age=0, s-maxage=0, must-revalidate` |
+| Unrevealed token, throttled or `rpc-unavailable` included | `public, max-age=0, s-maxage=0, must-revalidate` |
 | Minted but no metadata | `no-store` |
 | Anything that errored | `no-store` |
 | `/status` | `no-store` |

@@ -247,7 +247,10 @@ async function readBody(request: Request): Promise<string | null> {
   if (declared && Number(declared) > MAX_BODY_BYTES) return null;
 
   const raw = await request.text();
-  if (raw.length > MAX_BODY_BYTES) return null;
+  // Measure bytes, not characters. `String.length` counts UTF-16 code units,
+  // so a body of multi-byte characters is up to three times the limit before
+  // this notices.
+  if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) return null;
   return raw;
 }
 

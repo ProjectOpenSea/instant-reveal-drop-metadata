@@ -10,8 +10,8 @@
   "scripts": {
     "build:manifest": "node scripts/build-manifest.ts",
     "dev": "node adapters/node.ts",
-    "dev:cf": "npx wrangler dev",
-    "deploy": "npx wrangler deploy",
+    "dev:cf": "npx --yes wrangler@4 dev",
+    "deploy": "npx --yes wrangler@4 deploy",
     "preflight": "node scripts/preflight.ts",
     "seed:new": "node scripts/seed.ts new",
     "seed:show": "node scripts/seed.ts show",

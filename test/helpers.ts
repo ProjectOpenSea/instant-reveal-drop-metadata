@@ -23,6 +23,12 @@ export type FakeChain = {
   metadataCalls: number;
   /** Make the metadata source return a server error, to check the fallback. */
   metadataDown: boolean;
+  /** Raw hex to answer `ownerOf` with, instead of a well formed word. */
+  ownerOfRaw: string | null;
+  /** Raw hex to answer `totalSupply` with, instead of a well formed word. */
+  totalSupplyRaw: string | null;
+  /** Held open, every eth_call waits on it, so concurrency can be observed. */
+  gate: Promise<void> | null;
 };
 
 export function baseConfig(overrides: Partial<DropConfig> = {}): DropConfig {
@@ -68,13 +74,22 @@ export function makeFakeFetch(chain: FakeChain): FetchLike {
         const call = body.params[0] as { data: string };
         const selector = call.data.slice(0, 10);
 
+        if (chain.gate) await chain.gate;
+
         if (selector === "0x18160ddd") {
           return jsonResponse(
-            { jsonrpc: "2.0", id: body.id, result: hexWord(chain.totalSupply) },
+            {
+              jsonrpc: "2.0",
+              id: body.id,
+              result: chain.totalSupplyRaw ?? hexWord(chain.totalSupply),
+            },
             200,
           );
         }
         if (selector === "0x6352211e") {
+          if (chain.ownerOfRaw !== null) {
+            return jsonResponse({ jsonrpc: "2.0", id: body.id, result: chain.ownerOfRaw }, 200);
+          }
           const tokenId = Number(BigInt(`0x${call.data.slice(10)}`));
           const minted = tokenId >= 1 && tokenId <= chain.totalSupply;
           return minted
@@ -131,6 +146,9 @@ export function makeRuntime(
     rpcCalls: 0,
     metadataCalls: 0,
     metadataDown: false,
+    ownerOfRaw: null,
+    totalSupplyRaw: null,
+    gate: null,
     ...options.chain,
   };
 

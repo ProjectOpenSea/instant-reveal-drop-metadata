@@ -32,3 +32,17 @@ jobs:
       # One command, and the same one contributors run locally, so the two
       # cannot disagree about what passing means.
       - run: npm run ci
+
+      # `npm run check:privacy` above proves the guard passes on a clean tree.
+      # This proves it fails on a dirty one, which is the half that matters and
+      # the half nothing else exercises: it reads what git is holding, so a
+      # staged manifest is the only way to reach that code at all.
+      - name: the privacy guard blocks a staged manifest
+        run: |
+          npm run build:manifest -- --dir metadata/example
+          git add -f src/generated/manifest.ts
+          if npm run check:privacy; then
+            echo "::error::check:privacy passed on a staged manifest full of metadata"
+            exit 1
+          fi
+          git restore --staged --worktree src/generated/manifest.ts
