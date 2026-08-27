@@ -17,6 +17,9 @@ jobs:
 
       - run: npm ci
 
+      - name: no unrevealed metadata in git
+        run: npm run check:privacy
+
       - name: typecheck
         run: npm run typecheck
 

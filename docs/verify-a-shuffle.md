@@ -12,15 +12,12 @@ manifestHash   sha256("instant-reveal-manifest-v1:" + canonicalJson(metadataSet)
 commitment     sha256("instant-reveal-seed-v1:" + seed)
 ```
 
-The first fixes the set of artwork. The second fixes the mapping without
-revealing it. Both are served at `/provenance` on the creator's metadata server,
-and normally also posted wherever the drop was announced.
+The first fixes the set of artwork, the second fixes the mapping without
+revealing it. Both are served at `/provenance`, and normally posted wherever the
+drop was announced. After the mint the creator publishes the seed itself.
 
-After the mint, the creator publishes the seed itself, at `/provenance` or
-anywhere else.
-
-With those three values, plus the metadata set, anyone can recompute the mapping
-and compare it to what was actually served.
+With those three values and the metadata set, anyone can recompute the mapping
+and compare it to what was served.
 
 ## The algorithm
 
@@ -46,8 +43,8 @@ Written out so an independent implementation can reproduce it:
 6. `permutation[position]` is the index into the metadata set for the token at
    that position, where `position = tokenId - tokenIdStart`.
 
-The implementation lives in [`src/shuffle.ts`](../src/shuffle.ts), and there is a
-test pinning a known mapping so an upgrade cannot silently change it.
+The implementation is [`src/shuffle.ts`](../src/shuffle.ts), with a test pinning
+a known mapping so an upgrade cannot silently change it.
 
 ## A standalone script
 
@@ -109,21 +106,19 @@ Run it:
 node verify.mjs "the-published-seed" 1000 1
 ```
 
-Check that the commitment it prints matches the one published before the mint. If
-it does, this seed is the seed that was committed to. Then check a few of the
-mappings against what the collection actually shows: metadata index 41 is the
-42nd entry of the published set, counting from zero.
+If the commitment it prints matches the one published before the mint, this seed
+is the seed that was committed to. Then check a few mappings against what the
+collection shows: metadata index 41 is the 42nd entry of the published set.
 
 ## Checking the known mapping
 
-A quick sanity check that your implementation agrees with this one. With seed
-`instant-reveal-golden-seed` and size 16, the mapping is:
+With seed `instant-reveal-golden-seed` and size 16, the mapping is:
 
 ```
 [2, 4, 7, 0, 15, 14, 3, 6, 9, 8, 11, 13, 12, 10, 1, 5]
 ```
 
-If you get that, your implementation is correct.
+If you get that, your implementation agrees with this one.
 
 ## Checking the metadata set
 
@@ -144,7 +139,7 @@ function canonicalJson(value) {
 const manifestHash = sha256("instant-reveal-manifest-v1:" + canonicalJson(metadataSet));
 ```
 
-Where `metadataSet` is the array of metadata objects in upload order. If that
+Where `metadataSet` is the array of metadata objects in upload order. If it
 matches the published `manifestHash`, no artwork was swapped after the
 commitment.
 
@@ -153,10 +148,9 @@ commitment.
 It proves the mapping came from a seed committed to before the mint, and that the
 artwork set was not changed after the commitment.
 
-It does not prove the creator chose the seed without looking at anything, only
-that they were locked in before minting started. A creator could generate many
-seeds, pick the mapping they liked, and commit to that one. Committing before the
-art is even finalised, or deriving the seed from a future block hash, closes that
-gap. For most drops the commitment is enough, because the interesting cheat is
-reassigning rares to your own wallet mid-mint, and a commitment makes that
-impossible.
+It does not prove the creator chose the seed blindly, only that they were locked
+in before minting started. A creator could generate many seeds, pick the mapping
+they liked, and commit to that one. Committing before the art is finalised, or
+deriving the seed from a future block hash, closes that gap. For most drops the
+commitment is enough: the interesting cheat is reassigning rares to your own
+wallet mid-mint, and a commitment makes that impossible.

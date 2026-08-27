@@ -31,6 +31,9 @@ export type RevealStore = {
 
 const HIGH_WATER_KEY = "highWater";
 
+/** Cloudflare KV accepts about one write per second to a single key. */
+const KV_WRITE_INTERVAL_MS = 1_000;
+
 export function createMemoryRevealStore(): RevealStore {
   let highWater: number | null = null;
   return {
@@ -54,15 +57,36 @@ export function createMemoryRevealStore(): RevealStore {
  * KV is eventually consistent, which is the right trade here: a stale read is a
  * reveal that arrives a moment late, and the local high water mark and the
  * poller both cover it.
+ *
+ * Writes to one key are limited to about one a second, and a fast mint bumps the
+ * mark faster than that, so writes are coalesced. A bump inside the window
+ * updates the local mark immediately and parks the value, and the next store
+ * call past the window writes whatever the highest parked value turned out to
+ * be. Dropping the intermediate writes is safe because the mark only rises, so
+ * the write that does land supersedes every one it skipped.
  */
 export function createKvRevealStore(kv: KvLike): RevealStore {
   let cached: { value: number | null; atMs: number } | null = null;
   let local: number | null = null;
+  let pending: number | null = null;
+  let lastWriteAtMs: number | null = null;
+
+  async function flush(now: number): Promise<void> {
+    if (pending === null) return;
+    if (lastWriteAtMs !== null && now - lastWriteAtMs < KV_WRITE_INTERVAL_MS) return;
+
+    const value = pending;
+    pending = null;
+    lastWriteAtMs = now;
+    await kv.put(HIGH_WATER_KEY, String(value));
+    cached = { value, atMs: now };
+  }
 
   return {
     kind: "kv",
     async getHighWater() {
       const now = Date.now();
+      await flush(now);
       if (!cached || now - cached.atMs > 1_000) {
         const raw = await kv.get(HIGH_WATER_KEY, { cacheTtl: 60 });
         const parsed = raw === null ? null : Number.parseInt(raw, 10);
@@ -77,10 +101,12 @@ export function createKvRevealStore(kv: KvLike): RevealStore {
     async bumpHighWater(tokenId: number) {
       if (local !== null && tokenId <= local) return;
       local = tokenId;
-      const current = cached?.value ?? null;
-      if (current !== null && tokenId <= current) return;
-      await kv.put(HIGH_WATER_KEY, String(tokenId));
-      cached = { value: tokenId, atMs: Date.now() };
+
+      const known = cached?.value ?? null;
+      if (known !== null && tokenId <= known) return;
+
+      if (pending === null || tokenId > pending) pending = tokenId;
+      await flush(Date.now());
     },
     describe() {
       return "Cloudflare KV, shared across instances";

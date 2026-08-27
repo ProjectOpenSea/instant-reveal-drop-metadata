@@ -141,10 +141,22 @@ export function encodeBytes4(selector: string, value: string): string {
   return selector + clean.padEnd(64, "0");
 }
 
+/**
+ * Parse a hex word. Malformed return data is an RPC problem, not a crash: an
+ * endpoint that answers with something unexpected must surface as a transport
+ * error so the caller fails closed, rather than as a raw SyntaxError from BigInt.
+ */
+function hexWordToBigInt(clean: string, what: string): bigint {
+  if (!/^[0-9a-fA-F]+$/.test(clean)) {
+    throw new RpcTransportError(`return data is not hex where ${what} was expected`);
+  }
+  return BigInt("0x" + clean);
+}
+
 export function decodeUint256(hex: string): bigint {
   const clean = hex.replace(/^0x/, "");
   if (clean.length === 0) throw new RpcTransportError("empty return data where a number was expected");
-  return BigInt("0x" + clean.slice(0, 64));
+  return hexWordToBigInt(clean.slice(0, 64), "a number");
 }
 
 export function decodeAddress(hex: string): string {
@@ -157,8 +169,10 @@ export function decodeAddress(hex: string): string {
 export function decodeString(hex: string): string {
   const clean = hex.replace(/^0x/, "");
   if (clean.length < 128) return "";
-  const offset = Number(BigInt("0x" + clean.slice(0, 64))) * 2;
-  const length = Number(BigInt("0x" + clean.slice(offset, offset + 64)));
+  const offset = Number(hexWordToBigInt(clean.slice(0, 64), "a string offset")) * 2;
+  if (!Number.isSafeInteger(offset) || offset + 64 > clean.length) return "";
+  const length = Number(hexWordToBigInt(clean.slice(offset, offset + 64), "a string length"));
+  if (!Number.isSafeInteger(length) || offset + 64 + length * 2 > clean.length) return "";
   const bytesHex = clean.slice(offset + 64, offset + 64 + length * 2);
   const bytes = new Uint8Array(length);
   for (let i = 0; i < length; i++) {
@@ -170,7 +184,7 @@ export function decodeString(hex: string): string {
 export function decodeBool(hex: string): boolean {
   const clean = hex.replace(/^0x/, "");
   if (clean.length === 0) return false;
-  return BigInt("0x" + clean.slice(0, 64)) !== 0n;
+  return hexWordToBigInt(clean.slice(0, 64), "a boolean") !== 0n;
 }
 
 // --- Contract reads --------------------------------------------------------

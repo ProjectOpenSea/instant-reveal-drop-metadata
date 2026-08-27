@@ -1,8 +1,8 @@
 # After your drop mints out
 
-You do not have to keep this server running forever. Once every token is minted
-there is nothing left to hide, so the sensible end state is the normal one: an
-IPFS directory, pinned, with the contract pointing at it.
+You do not have to keep this running forever. Once every token is minted there is
+nothing left to hide, so the sensible end state is the normal one: a pinned IPFS
+directory with the contract pointing at it.
 
 ## Option 1, hand the collection back to IPFS
 
@@ -13,8 +13,8 @@ npm run export
 ```
 
 That writes one file per token to `out/`, named after the token ID with no
-extension, which is exactly what `tokenURI` expects. The shuffle, if you used one,
-is already applied, so the exported files match what the server has been serving.
+extension, which is what `tokenURI` expects. The shuffle, if you used one, is
+already applied, so the files match what the server has been serving.
 
 Pin the directory:
 
@@ -55,8 +55,7 @@ Leave the server up for a day or two while indexers catch up, then switch it off
 
 ## Option 2, leave the server running
 
-Fine too, and simpler. Set the reveal switch so nothing depends on chain reads any
-more:
+Fine too, and simpler. Set the reveal switch so nothing depends on chain reads:
 
 ```bash
 npx wrangler secret put REVEAL_ALL   # value: true
@@ -65,11 +64,11 @@ npx wrangler secret put REVEAL_ALL   # value: true
 Every token is then served immediately, and the server stops calling your RPC
 endpoint entirely.
 
-The trade is that your collection's metadata now depends on a server you maintain,
-a domain you keep renewing, and an account that stays in good standing. Collectors
-generally prefer IPFS for exactly this reason. If you go this route, use a domain
-you control rather than a `*.workers.dev` or `*.vercel.app` hostname, so you can
-move hosts later without touching the contract.
+The trade is that your collection's metadata now depends on a server you
+maintain, a domain you keep renewing, and an account in good standing. Collectors
+prefer IPFS for that reason. If you go this way, use a domain you control rather
+than a `*.workers.dev` or `*.vercel.app` hostname, so you can move hosts later
+without touching the contract.
 
 ## Publishing the seed, if you used a shuffle
 
@@ -80,12 +79,12 @@ npx wrangler secret put PUBLISH_SEED   # value: true
 ```
 
 `/provenance` then serves the seed alongside the commitment you published before
-the mint. Anyone can recompute the mapping and confirm it matches what was served.
-See [verify-a-shuffle.md](verify-a-shuffle.md), and consider posting the seed
-wherever you announced the drop rather than only at an endpoint.
+the mint, and anyone can recompute the mapping. See
+[verify-a-shuffle.md](verify-a-shuffle.md), and post the seed wherever you
+announced the drop rather than only at an endpoint.
 
 If you pin to IPFS, `npm run export -- --include-seed` puts the seed in
-`out/provenance.json` too, which makes the record permanent. That file is public
+`out/provenance.json` as well, making the record permanent. That file is public
 and forever, so it is opt in.
 
 ## If the drop never mints out
@@ -93,17 +92,17 @@ and forever, so it is opt in.
 Common enough, and nothing breaks. Unminted tokens keep returning the placeholder
 indefinitely, which is the correct answer: they do not exist.
 
-If you close the mint early and want the remaining tokens to look finished rather
-than pending, edit the placeholder in `drop.config.ts` and redeploy.
+To make the remaining tokens look finished rather than pending after closing a
+mint early, edit the placeholder in `drop.config.ts` and redeploy.
 
 ## What to check before switching the server off
 
-Does `tokenURI` return the IPFS URI now, for a few different token IDs.
+Does `tokenURI` return the IPFS URI, for a few different token IDs.
 
-Does a gateway serve each of those, without a long delay on first fetch.
+Does a gateway serve each of those without a long delay on first fetch.
 
-Does OpenSea show the artwork, on tokens you sampled from across the range rather
-than only token 1.
+Does OpenSea show the artwork, on tokens sampled across the range rather than
+only token 1.
 
 Is anything else pointing at the server: a custom `contractURI`, your own site, a
-Discord bot, an analytics job. Those are easy to forget and they break quietly.
+Discord bot, an analytics job. Those are easy to forget and break quietly.

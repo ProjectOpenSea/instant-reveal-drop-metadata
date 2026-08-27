@@ -9,13 +9,19 @@
 export type ChainInfo = {
   chainId: number;
   defaultRpcUrl: string;
+  /** Only when OpenSea's API names the chain differently to the key here. */
+  openseaSlug?: string;
 };
 
 export const CHAINS: Record<string, ChainInfo> = {
   ethereum: { chainId: 1, defaultRpcUrl: "https://ethereum-rpc.publicnode.com" },
   base: { chainId: 8453, defaultRpcUrl: "https://base-rpc.publicnode.com" },
   matic: { chainId: 137, defaultRpcUrl: "https://polygon-bor-rpc.publicnode.com" },
-  polygon: { chainId: 137, defaultRpcUrl: "https://polygon-bor-rpc.publicnode.com" },
+  polygon: {
+    chainId: 137,
+    defaultRpcUrl: "https://polygon-bor-rpc.publicnode.com",
+    openseaSlug: "matic",
+  },
   arbitrum: { chainId: 42161, defaultRpcUrl: "https://arbitrum-one-rpc.publicnode.com" },
   optimism: { chainId: 10, defaultRpcUrl: "https://optimism-rpc.publicnode.com" },
   avalanche: { chainId: 43114, defaultRpcUrl: "https://avalanche-c-chain-rpc.publicnode.com" },
@@ -49,4 +55,12 @@ export function resolveRpcUrl(chain: string, envRpcUrl?: string | null): string 
     );
   }
   return info.defaultRpcUrl;
+}
+
+/**
+ * The name OpenSea's API uses for a chain, which is not always the name people
+ * reach for: Polygon is `matic` there. Used when building api.opensea.io URLs.
+ */
+export function openseaChainSlug(chain: string): string {
+  return CHAINS[chain]?.openseaSlug ?? chain;
 }

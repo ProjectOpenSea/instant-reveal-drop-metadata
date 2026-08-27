@@ -1,7 +1,7 @@
 # Deploying
 
-Five options, in the order most people should consider them. All of them serve
-the same code from `src/handler.ts`.
+Five options, in the order most people should consider them. All serve the same
+code from `src/handler.ts`.
 
 | Option | Account needed | Good for |
 | --- | --- | --- |
@@ -13,16 +13,15 @@ the same code from `src/handler.ts`.
 
 ## Cloudflare Workers
 
-The recommended option. One command, no build step, and the free plan is enough
-for a normal drop.
+One command, no build step, and the free plan is enough for a normal drop.
 
 ```bash
 npm run build:manifest
 npx wrangler deploy
 ```
 
-The first run opens a browser to authorise the CLI, and prints a
-`*.workers.dev` URL. Set your secrets after that:
+The first run opens a browser to authorise the CLI and prints a `*.workers.dev`
+URL. Set your secrets after that:
 
 ```bash
 npx wrangler secret put RPC_URL
@@ -40,15 +39,15 @@ Redeploy after changing `drop.config.ts` or rebuilding the manifest. Secrets do
 not need a redeploy.
 
 For a custom domain, add a route in `wrangler.toml` or attach one in the
-Cloudflare dashboard. Whatever hostname you settle on is the one that goes in
-`setBaseURI`, so pick it before you point the contract at anything.
+Cloudflare dashboard. Whatever hostname you settle on goes into `setBaseURI`, so
+pick it before pointing the contract at anything.
 
 ### Sharing mint progress between instances
 
 Only worth doing if you run a webhook. Cloudflare runs many independent copies of
-your worker, and a webhook delivery reaches one of them. Without a shared store
-the others catch up on their next poll, which is correct but slower than the
-webhook you set up.
+your worker and a delivery reaches one of them. Without a shared store the others
+catch up on their next poll, which is correct but slower than the webhook you set
+up.
 
 ```bash
 npx wrangler kv namespace create REVEAL_STATE
@@ -75,7 +74,9 @@ R2 is Cloudflare specific, so on Vercel use `metadata.source: "bundled"` or
 
 Deno runs the Node adapter through its Node compatibility layer. Create a project
 from your GitHub repository, set the entry point to `adapters/node.ts`, and add
-`RPC_URL` as an environment variable. There is no CLI step and no build.
+`RPC_URL` as an environment variable. No CLI step and no build. This path is the
+least exercised of the five, so run `npm run preflight -- --url ...` against it
+before pointing a contract at it.
 
 ## Any Node host
 
@@ -87,15 +88,14 @@ npm run build:manifest
 PORT=8787 node adapters/node.ts
 ```
 
-Node 22 or newer, because the source is TypeScript that Node runs directly. No
-build step, no bundler.
+Node 22.18 or newer, which is where running TypeScript directly stopped needing a
+flag. No build step, no bundler.
 
 ## Your machine plus a tunnel
 
-The fastest way to see the whole thing working, with nothing to sign up for. Good
-for a test drop. Not good for a real mint, because the URL disappears when you
-close your laptop, and a `baseURI` pointing at a dead host means every token
-looks broken.
+The fastest way to see it working, with nothing to sign up for. Good for a test
+drop. Not for a real mint: the URL disappears when you close your laptop, and a
+`baseURI` pointing at a dead host means every token looks broken.
 
 ```bash
 npm run dev
@@ -109,15 +109,13 @@ npx cloudflared tunnel --url http://localhost:8787
 
 That prints a `https://something-random.trycloudflare.com` URL, live immediately,
 no account and no login. Point your test drop's `baseURI` at it with a trailing
-slash and you are done.
+slash and you are done. `brew install cloudflared` works too.
 
-`brew install cloudflared` works too if you would rather not use `npx`.
+GitHub Codespaces forwarded ports do the same job: run `npm run dev` there and
+set the port's visibility to public.
 
-If you already use GitHub Codespaces, its forwarded ports do the same job: run
-`npm run dev` in the Codespace and set the port's visibility to public.
-
-Full walkthrough of a test run, including minting and watching the reveal land,
-in [test-run.md](test-run.md).
+Full walkthrough, including minting and watching the reveal land, in
+[test-run.md](test-run.md).
 
 ## Whichever you choose
 
@@ -136,8 +134,6 @@ cast send <contract> "setBaseURI(string)" "https://your-server/" \
   --rpc-url $RPC_URL --private-key $KEY
 ```
 
-If you would rather not use a CLI for that, the contract's `setBaseURI` is
-callable from Etherscan's write tab with the owner wallet connected.
-
-Then run preflight once more, so the check that your server and your contract
-agree happens after both are pointed at each other.
+`setBaseURI` is also callable from Etherscan's write tab with the owner wallet
+connected. Then run preflight once more, so the server and the contract are
+checked against each other after both are pointed at each other.

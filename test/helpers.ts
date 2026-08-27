@@ -4,6 +4,7 @@
 
 import type { DropConfig } from "../src/config.ts";
 import type { Env } from "../src/env.ts";
+import type { KvLike, RevealStore } from "../src/reveal-store.ts";
 import { createRuntime, type Runtime } from "../src/runtime.ts";
 import type { FetchLike } from "../src/rpc.ts";
 
@@ -20,6 +21,8 @@ export type FakeChain = {
   rpcCalls: number;
   /** How many metadata fetches have been made. */
   metadataCalls: number;
+  /** Make the metadata source return a server error, to check the fallback. */
+  metadataDown: boolean;
 };
 
 export function baseConfig(overrides: Partial<DropConfig> = {}): DropConfig {
@@ -92,6 +95,7 @@ export function makeFakeFetch(chain: FakeChain): FetchLike {
 
     if (input.startsWith(METADATA_URL)) {
       chain.metadataCalls += 1;
+      if (chain.metadataDown) return new Response("upstream is unhappy", { status: 502 });
       const index = Number(input.slice(input.lastIndexOf("/") + 1).replace(".json", ""));
       if (!Number.isInteger(index) || index < 0 || index > 999) {
         return new Response("not found", { status: 404 });
@@ -114,12 +118,14 @@ export function makeRuntime(options: {
   config?: Partial<DropConfig>;
   env?: Partial<Env>;
   chain?: Partial<FakeChain>;
+  store?: RevealStore;
 } = {}): { runtime: Runtime; chain: FakeChain } {
   const chain: FakeChain = {
     totalSupply: 0,
     down: false,
     rpcCalls: 0,
     metadataCalls: 0,
+    metadataDown: false,
     ...options.chain,
   };
 
@@ -133,6 +139,7 @@ export function makeRuntime(options: {
     config: baseConfig(options.config),
     env,
     fetchImpl: makeFakeFetch(chain),
+    ...(options.store ? { store: options.store } : {}),
   });
 
   return { runtime, chain };
@@ -151,4 +158,40 @@ function jsonResponse(body: unknown, status: number): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+/** A KV namespace that records every write, for the coalescing tests. */
+export function makeFakeKv(): KvLike & { writes: string[]; now: number } {
+  const state = {
+    writes: [] as string[],
+    now: 1_000_000,
+    value: null as string | null,
+    async get(_key: string): Promise<string | null> {
+      return state.value;
+    },
+    async put(_key: string, value: string): Promise<void> {
+      state.writes.push(value);
+      state.value = value;
+    },
+  };
+  return state;
+}
+
+/**
+ * A store that records nothing and fails every write, so a reveal that still
+ * happens can only have come from the reader's own in-memory mark.
+ */
+export function makeBrokenStore(): RevealStore {
+  return {
+    kind: "broken",
+    async getHighWater() {
+      return null;
+    },
+    async bumpHighWater() {
+      throw new Error("shared store is unavailable");
+    },
+    describe() {
+      return "a store that always fails";
+    },
+  };
 }

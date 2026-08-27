@@ -1,33 +1,29 @@
 # Instant reveal drop metadata
 
-A small metadata server you host yourself. Each NFT in your drop becomes visible
-the moment its mint lands onchain, while everything still unminted stays hidden.
+A metadata server you host yourself. Each NFT becomes visible the moment its
+mint lands onchain, while everything still unminted stays hidden.
 
-No contract changes, no new tooling in your mint flow. You point your drop
-contract's `baseURI` at this server instead of at an IPFS directory, and you can
-move it back to IPFS once the mint is over.
+No contract changes and no new tooling in your mint flow. You point your drop
+contract's `baseURI` at this server instead of at an IPFS directory, and move it
+back to IPFS once the mint is over.
 
-It runs on Cloudflare Workers, Vercel, or any Node process, and it needs no
-database. For a test run you can serve it from your laptop through a tunnel
-without signing up for anything.
+Runs on Cloudflare Workers, Vercel, or any Node process. No database. For a test
+run you can serve it from your laptop through a tunnel without signing up for
+anything.
 
 ## Why not just publish the metadata up front
 
-You can, and for plenty of drops that is the right answer. Set `baseURI` to your
-IPFS directory at launch and everything is revealed from the first mint.
+For plenty of drops that is the right answer. Set `baseURI` to your IPFS
+directory at launch and everything is revealed from the first mint.
 
-The reason most drops do not is sniping. If the full metadata directory is
-public, anyone can read it, work out that token 412 is the one good piece, watch
-`totalSupply` climb, and mint at exactly the right moment. SeaDrop hands out
-token IDs in order, so a minter cannot pick their token ID, which means the whole
-attack comes down to knowing the mapping and timing the transaction.
-
-Delayed reveal removes that, at the cost of the thing everyone actually wants:
-seeing what they got.
+The reason most drops do not is sniping. A public metadata directory tells
+anyone that token 412 is the good piece, and SeaDrop hands out IDs in order, so
+watching `totalSupply` climb is enough to mint at exactly the right moment.
+Delayed reveal removes that, at the cost of the thing everyone wants: seeing
+what they got.
 
 This server gives you both. Minters see their token seconds after minting, and
-nobody can see a token that has not been minted yet, so there is no mapping to
-time your transaction against.
+there is no published mapping to time a transaction against.
 
 ## How it works
 
@@ -48,47 +44,43 @@ time your transaction against.
      |<-------------------- placeholder, not minted yet ---------|
 ```
 
-Four things are worth knowing about that picture.
-
-The contract does not need to understand any of this. A SeaDrop `baseURI` that
-ends in a slash is treated as revealed, and `tokenURI(41)` returns
-`baseURI + "41"`. An https base URI works exactly like an `ipfs://` one.
+The contract needs no changes. A SeaDrop `baseURI` ending in a slash means
+revealed, and `tokenURI(41)` returns `baseURI + "41"`. An https base URI works
+exactly like an `ipfs://` one.
 
 Which artwork a token gets is decided before the mint opens, by token ID alone.
-It never depends on who minted it or when. That is why a chain reorg cannot hand
-someone the wrong piece: the worst a reorg can do is reveal one token a few
-seconds early.
+A reorg can therefore reveal a token a few seconds early, but can never hand
+someone the wrong piece.
 
-The server fails closed. If it cannot reach the chain, it serves the placeholder.
-An outage makes reveals late, never early.
+The server fails closed. If it cannot reach the chain, or its metadata, it
+serves the placeholder. Failures make reveals late, never early.
 
 A revealed token is cached forever, an unrevealed one is never cached at all.
-That second half matters more than it looks: a CDN that holds on to one
-"unrevealed" response will keep serving a placeholder for a token that has since
-minted. The headers are set in one place, and there are tests on them.
+The second half matters more than it looks: a CDN that holds one "unrevealed"
+response keeps serving a placeholder for a token that has since minted. The
+headers are set in one place, and tested.
 
 ## What this hides, and what it does not
 
 It hides which token ID gets which artwork, for tokens that have not minted.
 
 It does not hide the artwork itself. Your images can sit on public IPFS as
-normal, because an image on its own does not say which token ID it belongs to.
+normal, because an image alone does not say which token ID it belongs to.
 
-It does not hide the rarity distribution. Anyone can count the traits of what has
-already minted and work out what is left, which is true of any reveal scheme.
+It does not hide the rarity distribution. Anyone can count the traits of what
+has minted and work out what is left, which is true of any reveal scheme.
 
-It cannot un-reveal something. Once a token has minted, its metadata is public,
-and anyone can archive it.
+It cannot un-reveal something. Once a token mints its metadata is public, and
+anyone can archive it.
 
-If you want holders to be able to check that you did not quietly reorder the good
-pieces, turn on the optional shuffle. You publish a hash of your metadata set and
-a commitment to a secret seed before minting, then publish the seed afterwards.
-Anyone can recompute the mapping and confirm it matches what was served all
-along. See [docs/security.md](docs/security.md).
+To let holders check that you did not quietly reorder the good pieces, turn on
+the optional shuffle: publish a hash of your metadata set and a commitment to a
+secret seed before minting, then publish the seed afterwards. See
+[docs/security.md](docs/security.md).
 
 ## Quick start
 
-You need Node 22 or newer, and a drop that has not minted out yet.
+Node 22.18 or newer, and a drop that has not minted out.
 
 ```bash
 git clone https://github.com/ProjectOpenSea/instant-reveal-drop-metadata
@@ -96,66 +88,52 @@ cd instant-reveal-drop-metadata
 npm install
 ```
 
-Put your metadata files in `metadata/`, one JSON file per token, named `1.json`,
-`2.json`, and so on. Then:
+Put one JSON file per token in `metadata/`, named `1.json`, `2.json`, and so on.
+Then compile them into the server:
 
 ```bash
 npm run build:manifest
 ```
 
-Edit `drop.config.ts`, which is the only file you need to touch. At minimum set
-`chain`, `contract`, `maxSupply`, and a `placeholder` image. Then check your
-setup against the live contract:
+Edit `drop.config.ts`, the only file you need to touch. At minimum set `chain`,
+`contract`, `maxSupply`, and a `placeholder` image. Then check it against the
+live contract, run it, and deploy:
 
 ```bash
 npm run preflight
+npm run dev            # then open http://localhost:8787/1 and /status
+npx wrangler deploy    # docs/deploy.md covers the other options
 ```
 
-Run it locally and look at a token:
-
-```bash
-npm run dev
-open http://localhost:8787/1
-open http://localhost:8787/status
-```
-
-Deploy it ([docs/deploy.md](docs/deploy.md) covers the options):
-
-```bash
-npx wrangler deploy
-```
-
-Then point your contract at it, from the wallet that owns the drop:
+Point the contract at it, from the wallet that owns the drop:
 
 ```bash
 cast send <your contract> "setBaseURI(string)" "https://your-worker.workers.dev/" \
   --rpc-url $RPC_URL --private-key $YOUR_KEY
 ```
 
-The trailing slash is required. Without it, SeaDrop returns that exact URI for
+The trailing slash is required. Without it SeaDrop returns that exact URI for
 every token, which is how a pre-reveal drop works.
 
-Finally, confirm the deployed server agrees with the chain:
+Finally, confirm the deployed server and the chain agree:
 
 ```bash
 npm run preflight -- --url https://your-worker.workers.dev
 ```
 
-That last command checks the things that are easy to get wrong: that a minted
-token really is revealed, that an unminted one really is not, and that the cache
-headers will not strand a placeholder.
+That checks the things that are easy to get wrong: that a minted token really is
+revealed, that an unminted one really is not, and that the cache headers will
+not strand a placeholder.
 
 ## How fast is the reveal
 
-Out of the box, a reveal lands within `mintState.ttlSeconds` of the mint, which
-defaults to 10 seconds. The server reads `totalSupply()` at most once per window,
-however much traffic it is getting, so a busy mint costs about six RPC calls a
-minute.
+A reveal lands within `mintState.ttlSeconds` of the mint, 10 seconds by default.
+The server reads `totalSupply()` at most once per window however much traffic it
+gets, so a busy mint costs about six RPC calls a minute.
 
-If you want it faster, point a webhook at the server and reveals land in about a
-second. Alchemy is supported directly, with signature verification, and there is
-a provider agnostic route for anything else. Polling keeps running underneath, so
-a webhook that misses a delivery costs you nothing.
+For about a second instead, point a webhook at it. Alchemy is supported directly
+with signature verification, and there is a provider agnostic route for anything
+else. Polling keeps running underneath, so a missed delivery costs nothing.
 
 ```bash
 curl -X POST https://your-worker.workers.dev/webhook/mint \
@@ -167,8 +145,7 @@ See [docs/webhooks.md](docs/webhooks.md).
 
 ## After your drop mints out
 
-You do not have to keep this running forever. Export the final metadata, pin it,
-and hand the collection back to IPFS:
+Export the final metadata, pin it, and hand the collection back to IPFS:
 
 ```bash
 npm run export
@@ -176,36 +153,33 @@ ipfs add -r --cid-version 1 out
 cast send <your contract> "setBaseURI(string)" "ipfs://<cid>/"
 ```
 
-The export applies the shuffle, if you used one, so the pinned files match
-exactly what the server has been serving. Details, including what to check before
-you switch the server off, are in
+The export applies the shuffle, if you used one, so the pinned files match what
+the server has been serving. What to check before switching the server off is in
 [docs/after-mint-out.md](docs/after-mint-out.md).
 
 ## What it costs
 
-Nothing, for most drops. There is no database and no storage bill: your metadata
-is compiled into the deployment, and the only outbound traffic is a `totalSupply`
-read every few seconds.
-
-Cloudflare's free plan covers 100,000 requests a day, which is more than a normal
-drop generates. Vercel's hobby plan is comparable. A public RPC endpoint will do
-for a test, and a free Alchemy or similar key is plenty for a real mint.
+Nothing, for most drops. No database and no storage bill: your metadata is
+compiled into the deployment, and the only outbound traffic is a `totalSupply`
+read every few seconds. Cloudflare's free plan covers 100,000 requests a day,
+more than a normal drop generates, and Vercel's hobby plan is comparable. A free
+Alchemy or similar key is plenty for a real mint.
 
 ## Endpoints
 
 | Path | What it does |
 | --- | --- |
 | `GET /{tokenId}` | The metadata, real or placeholder. This is what `baseURI` points at. |
-| `GET /status` | Whether the setup is working, how far the mint has got, and what is wrong if anything is. Safe to share, it never includes a secret. |
+| `GET /status` | Whether the setup is working, how far the mint has got, and what is wrong if anything is. Safe to share, never includes a secret. |
 | `GET /provenance` | The manifest hash, the seed commitment, and the seed once you publish it. |
 | `GET /health` | Returns `ok`. |
 | `GET /contract.json` | Collection level metadata, if you configured any. |
 | `POST /webhook/alchemy` | Alchemy Notify deliveries. Off until you set a signing key. |
 | `POST /webhook/mint` | Any other provider, or your own script. Off until you set a secret. |
 
-Every token response carries an `x-reveal-state` header (`minted`, `unminted`,
-`reveal-all`, `rpc-unavailable`, `metadata-missing`), which makes it obvious what
-the server decided and why.
+Every token response carries an `x-reveal-state` header, which says what the
+server decided and why: `minted`, `unminted`, `reveal-all`, `reveal-none`,
+`rpc-unavailable`, `metadata-missing`, or `error`.
 
 ## Documentation
 
@@ -221,13 +195,13 @@ the server decided and why.
 
 ## Support
 
-This is a reference implementation, shared so creators and partners can run
-instant reveal themselves. It is not a hosted OpenSea product, and OpenSea does
-not operate the server you deploy. Issues and pull requests are welcome, and no
-response time is promised.
+A reference implementation, shared so creators and partners can run instant
+reveal themselves. It is not a hosted OpenSea product, and OpenSea does not
+operate the server you deploy. Issues and pull requests are welcome, with no
+promised response time.
 
-If you are looking at this because you want instant reveal inside OpenSea Studio
-rather than self-hosted, say so in an issue. Interest is useful information.
+If you want instant reveal inside OpenSea Studio rather than self-hosted, say so
+in an issue. Interest is useful information.
 
 ## License
 
