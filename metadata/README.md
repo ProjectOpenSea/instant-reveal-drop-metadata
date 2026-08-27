@@ -29,6 +29,13 @@ the seed decides which position each token ID lands on.
 Either way, renaming files between builds changes which artwork a token gets, so
 settle on an order before publishing anything.
 
+Because that order cannot be corrected once tokens are minted,
+`npm run build:manifest` refuses to guess it. It stops if two files claim the
+same position (`1.backup.json` next to `1.json`), if a number is missing from
+the run, or if any file is not named for a position. Use `manifest.json` when
+you want to state the order explicitly instead. The build also prints which file
+became which token, which is worth a glance before you deploy.
+
 ## What goes in a file
 
 The standard OpenSea metadata shape. Nothing here is specific to this server:

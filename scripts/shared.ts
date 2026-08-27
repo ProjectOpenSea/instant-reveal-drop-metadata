@@ -42,11 +42,88 @@ export type LoadedMetadata = {
   files: string[];
 };
 
+/** The order of a metadata set could not be trusted to mean what you meant. */
+export class MetadataOrderError extends Error {}
+
+const LEADING_NUMBER = /^(\d+)/;
+
+/**
+ * Decide which file is which position, and refuse to guess.
+ *
+ * Position is what a token ID maps to, so getting this wrong is a whole
+ * collection with the wrong artwork, and it cannot be corrected once the tokens
+ * are minted. Every ambiguous case is an error rather than a best effort,
+ * because the alternative is a build that prints "ok" and ships the wrong art.
+ *
+ * `dir` is only used to write a message someone can act on.
+ */
+export function orderMetadataFiles(names: readonly string[], dir: string): string[] {
+  const numbered: Array<{ name: string; position: number }> = [];
+  const unnumbered: string[] = [];
+
+  for (const name of names) {
+    const match = LEADING_NUMBER.exec(name);
+    if (match?.[1]) numbered.push({ name, position: Number(match[1]) });
+    else unnumbered.push(name);
+  }
+
+  if (unnumbered.length > 0) {
+    throw new MetadataOrderError(
+      `${dir} has files that are not named by position: ${list(unnumbered)}.\n` +
+        `  Position decides which token gets which artwork, and a name like ` +
+        `"art-10.json" sorts before "art-2.json", so the order would not be the ` +
+        `one you meant.\n` +
+        `  Either name every file for its position (1.json, 2.json, ...), or put ` +
+        `the set in a single manifest.json array where the order is explicit.`,
+    );
+  }
+
+  const byPosition = new Map<number, string[]>();
+  for (const { name, position } of numbered) {
+    const existing = byPosition.get(position);
+    if (existing) existing.push(name);
+    else byPosition.set(position, [name]);
+  }
+
+  const collisions = [...byPosition.values()].filter((group) => group.length > 1);
+  if (collisions.length > 0) {
+    throw new MetadataOrderError(
+      `${dir} has more than one file for the same position: ` +
+        `${collisions.map((group) => list(group.sort())).join("; ")}.\n` +
+        `  A leftover draft or backup shifts every token after it onto the wrong ` +
+        `artwork, so remove the extra file rather than letting the build pick one.`,
+    );
+  }
+
+  const positions = [...byPosition.keys()].sort((a, b) => a - b);
+  const missing: number[] = [];
+  for (let i = 1; i < positions.length; i++) {
+    const previous = positions[i - 1] as number;
+    const current = positions[i] as number;
+    for (let gap = previous + 1; gap < current && missing.length <= 10; gap++) missing.push(gap);
+  }
+  if (missing.length > 0) {
+    const shown = missing.slice(0, 10).join(", ");
+    throw new MetadataOrderError(
+      `${dir} is missing ${shown}${missing.length > 10 ? ", ..." : ""}.\n` +
+        `  A gap shifts every file after it onto the wrong token, so add the ` +
+        `missing files or renumber the set so it runs without one.`,
+    );
+  }
+
+  return positions.map((position) => (byPosition.get(position) as string[])[0] as string);
+}
+
+function list(names: readonly string[]): string {
+  const shown = names.slice(0, 5).join(", ");
+  return names.length > 5 ? `${shown}, and ${names.length - 5} more` : shown;
+}
+
 /**
  * Load a metadata set from a directory.
  *
  * Two layouts work. Either one JSON file per token (`1.json`, `2.json`, ...),
- * read in numeric order, or a single `manifest.json` holding an array. Position
+ * read in position order, or a single `manifest.json` holding an array. Position
  * in that order is what the token ID maps to, so it has to stay stable: if you
  * rename files between builds, tokens change artwork.
  */
@@ -74,11 +151,11 @@ export function loadMetadataDir(dir: string): LoadedMetadata {
     );
   }
 
-  jsonFiles.sort(numericThenAlpha);
+  const ordered = orderMetadataFiles(jsonFiles, dir);
 
   const entries: TokenMetadata[] = [];
   const files: string[] = [];
-  for (const name of jsonFiles) {
+  for (const name of ordered) {
     const path = join(dir, name);
     try {
       entries.push(JSON.parse(readFileSync(path, "utf8")) as TokenMetadata);
@@ -98,16 +175,14 @@ function existsFile(path: string): boolean {
   }
 }
 
-/** 2.json before 10.json, which a plain string sort gets wrong. */
-function numericThenAlpha(a: string, b: string): number {
-  const numA = Number.parseInt(a, 10);
-  const numB = Number.parseInt(b, 10);
-  const aIsNum = Number.isFinite(numA) && /^\d/.test(a);
-  const bIsNum = Number.isFinite(numB) && /^\d/.test(b);
-  if (aIsNum && bIsNum && numA !== numB) return numA - numB;
-  if (aIsNum && !bIsNum) return -1;
-  if (!aIsNum && bIsNum) return 1;
-  return a.localeCompare(b);
+/**
+ * Report a problem the way the rest of these scripts do, and stop. A metadata
+ * set that cannot be ordered is a mistake to fix, not a stack trace to read.
+ */
+export function die(error: unknown): never {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`\n  ${RED}stop${RESET}  ${message}\n`);
+  process.exit(1);
 }
 
 export function formatBytes(bytes: number): string {

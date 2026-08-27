@@ -141,6 +141,18 @@ The signature did not match, so the signing key is not the one for this webhook.
 Each webhook in the Alchemy dashboard has its own key and it is easy to copy the
 wrong one. Re-copy from the webhook's detail page.
 
+## `build:manifest` stops on the metadata set
+
+It found an order it could not trust, and stopping is deliberate: position
+decides which artwork each token gets, and nothing can change that after a mint.
+
+Two files for the same position usually means a leftover draft or backup, like
+`1.backup.json` sitting next to `1.json`. Delete the extra one. A missing number
+shifts every file after it onto the wrong token, so add it or renumber the set.
+A file that is not named for a position, like `art-10.json`, has no order anyone
+can infer, since it sorts before `art-2.json` as text; rename them or use a
+`manifest.json` array where the order is explicit.
+
 ## A token 404s
 
 It is outside `tokenIdStart` to `tokenIdStart + maxSupply - 1`. The 404 body
