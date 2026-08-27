@@ -16,7 +16,7 @@
 import type { ResolvedConfig, TokenMetadata } from "../config.ts";
 import type { Env } from "../env.ts";
 import type { FetchLike } from "../rpc.ts";
-import { renderPath, type MetadataSource } from "./index.ts";
+import { type MetadataSource, renderPath } from "./index.ts";
 
 export function createHttpSource(
   config: ResolvedConfig,

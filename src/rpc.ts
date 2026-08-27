@@ -150,7 +150,7 @@ function hexWordToBigInt(clean: string, what: string): bigint {
   if (!/^[0-9a-fA-F]+$/.test(clean)) {
     throw new RpcTransportError(`return data is not hex where ${what} was expected`);
   }
-  return BigInt("0x" + clean);
+  return BigInt(`0x${clean}`);
 }
 
 export function decodeUint256(hex: string): bigint {
@@ -163,7 +163,7 @@ export function decodeUint256(hex: string): bigint {
 export function decodeAddress(hex: string): string {
   const clean = hex.replace(/^0x/, "");
   if (clean.length < 64) throw new RpcTransportError("return data too short for an address");
-  return "0x" + clean.slice(24, 64);
+  return `0x${clean.slice(24, 64)}`;
 }
 
 /** Decode a dynamically sized ABI string return value. */

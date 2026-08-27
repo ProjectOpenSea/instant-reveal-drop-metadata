@@ -25,7 +25,7 @@ try {
   // No .env file.
 }
 
-const apiKey = process.env["OPENSEA_API_KEY"];
+const apiKey = process.env.OPENSEA_API_KEY;
 if (!apiKey) {
   console.error("\n  set OPENSEA_API_KEY first. https://docs.opensea.io/reference/api-keys\n");
   process.exit(1);

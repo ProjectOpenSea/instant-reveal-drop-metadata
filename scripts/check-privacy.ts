@@ -17,11 +17,11 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { RED, GREEN, RESET } from "./shared.ts";
+import { GREEN, RED, RESET } from "./shared.ts";
 
 const MANIFEST = "src/generated/manifest.ts";
 
-if (process.env["ALLOW_METADATA_IN_GIT"] === "1") {
+if (process.env.ALLOW_METADATA_IN_GIT === "1") {
   console.log(`\n  ${GREEN}skipped${RESET}  ALLOW_METADATA_IN_GIT=1 is set\n`);
   process.exit(0);
 }

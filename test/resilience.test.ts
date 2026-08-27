@@ -6,8 +6,8 @@
  * record at a marketplace.
  */
 
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import { handleRequest } from "../src/handler.ts";
 import { createKvRevealStore } from "../src/reveal-store.ts";
 import { get, makeBrokenStore, makeFakeKv, makeRuntime } from "./helpers.ts";

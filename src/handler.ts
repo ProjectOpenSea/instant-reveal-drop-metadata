@@ -12,7 +12,7 @@
  */
 
 import type { TokenMetadata } from "./config.ts";
-import { rpcHost, type Runtime } from "./runtime.ts";
+import { type Runtime, rpcHost } from "./runtime.ts";
 import { handleWebhook, isWebhookPath } from "./webhook.ts";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -24,7 +24,7 @@ const CORS_HEADERS: Record<string, string> = {
 
 /** Webhook replies are for the provider, not a browser. No CORS, never cached. */
 function webhookResponse(body: Record<string, unknown>, status: number): Response {
-  return new Response(JSON.stringify(body, null, 2) + "\n", {
+  return new Response(`${JSON.stringify(body, null, 2)}\n`, {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
@@ -297,7 +297,7 @@ function json(
   body: unknown,
   options: { status?: number; cacheControl: string; headers?: Record<string, string> },
 ): Response {
-  return new Response(JSON.stringify(body, null, 2) + "\n", {
+  return new Response(`${JSON.stringify(body, null, 2)}\n`, {
     status: options.status ?? 200,
     headers: {
       ...CORS_HEADERS,

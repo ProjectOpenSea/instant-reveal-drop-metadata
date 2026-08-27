@@ -195,13 +195,20 @@ server decided and why: `minted`, `unminted`, `reveal-all`, `reveal-none`,
 
 ## Working on this
 
-CI runs these on the Node version in `engines`, current LTS, and latest. They
-all run locally too:
+CI runs one command, and it is the same one you run here, so the two cannot
+disagree about what passing means:
 
 ```bash
-npm test              # 61 tests, no network
+npm run ci
+```
+
+That is lint and format, typecheck, 61 tests, and the two checks below, in that
+order. The pieces run on their own too:
+
+```bash
+npm run lint          # biome, lint and format together (`lint:fix` applies)
 npm run typecheck
-npm run lint          # biome, lint and format together (`lint:fix` to apply)
+npm test              # no network, no chain
 npm run check:worker  # the shared code still bundles for Cloudflare Workers
 npm run check:privacy # no unrevealed metadata staged or committed
 ```

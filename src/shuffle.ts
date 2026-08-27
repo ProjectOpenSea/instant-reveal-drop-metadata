@@ -95,7 +95,7 @@ export async function buildPermutation(seed: string, size: number): Promise<numb
   if (size <= 0) return [];
 
   const keyHex = await sha256Hex(seed);
-  const rng = new SplitMix64(BigInt("0x" + keyHex.slice(0, 16)));
+  const rng = new SplitMix64(BigInt(`0x${keyHex.slice(0, 16)}`));
 
   const permutation = Array.from({ length: size }, (_, i) => i);
   for (let i = size - 1; i > 0; i--) {

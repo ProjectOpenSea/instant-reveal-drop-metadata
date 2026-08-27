@@ -14,8 +14,8 @@
  */
 
 import type { ResolvedConfig, TokenMetadata } from "./config.ts";
-import type { MetadataSource } from "./sources/index.ts";
 import { buildPermutation } from "./shuffle.ts";
+import type { MetadataSource } from "./sources/index.ts";
 
 const ABSOLUTE_URI = /^[a-z][a-z0-9+.-]*:/i;
 

@@ -11,10 +11,10 @@
  * Run it again any time your metadata changes, and redeploy afterwards.
  */
 
-import { gzipSync } from "node:zlib";
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { config } from "../drop.config.ts";
 import { canonicalJson, manifestHash } from "../src/shuffle.ts";
 import { arg, fail, formatBytes, info, loadMetadataDir, ok, warn } from "./shared.ts";

@@ -24,26 +24,14 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
-      "complexity": {
-        // Env vars and untrusted JSON payloads are read with bracket access
-        // throughout, deliberately and consistently. Turning ~22 of those into
-        // dot access would be churn for style alone.
-        "useLiteralKeys": "off"
-      },
-      "style": {
-        // "0x" + hex reads better than a template in the ABI decoding, and the
-        // codebase is consistent about it.
-        "useTemplate": "off"
-      }
+      "recommended": true
     }
   },
-  // Import order is meaningful to read here and churns badly when sorted.
   "assist": {
     "enabled": true,
     "actions": {
       "source": {
-        "organizeImports": "off"
+        "organizeImports": "on"
       }
     }
   }
