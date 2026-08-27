@@ -11,7 +11,13 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { loadMetadataDir, MetadataOrderError, orderMetadataFiles } from "../scripts/shared.ts";
+import {
+  loadMetadataDir,
+  MetadataOrderError,
+  manifestEntryCount,
+  orderMetadataFiles,
+  renderManifestModule,
+} from "../scripts/shared.ts";
 
 const DIR = "metadata";
 
@@ -177,5 +183,41 @@ describe("loading a set from disk", () => {
     const dir = withFiles({ "1.json": "{}", "1.backup.json": "{}", "2.json": "{}" });
 
     assert.throws(() => loadMetadataDir(dir), MetadataOrderError);
+  });
+});
+
+describe("the guard that keeps unrevealed metadata out of git", () => {
+  const entries = [
+    { name: "One", image: "ipfs://a/1.png", attributes: [{ trait_type: "Rank", value: 1 }] },
+    { name: "Two", image: "ipfs://a/2.png", attributes: [] },
+  ];
+
+  it("counts the entries in a module the generator actually wrote", () => {
+    // The guard reads git, not disk, so nothing else notices if the generated
+    // format drifts away from the pattern the guard looks for. It would keep
+    // reporting "no unrevealed metadata in git" about a file full of it.
+    const module = renderManifestModule(entries, "abc123", "2026-01-01T00:00:00.000Z", "metadata");
+
+    assert.equal(manifestEntryCount(module), 2);
+  });
+
+  it("is not fooled by a bracket inside the metadata itself", () => {
+    const awkward = [{ name: 'ends with "];" and then some', description: "[\n];\n" }];
+    const module = renderManifestModule(awkward, "abc123", "2026-01-01T00:00:00.000Z", "metadata");
+
+    assert.equal(manifestEntryCount(module), 1);
+  });
+
+  it("reads an unbuilt manifest as empty", () => {
+    const module = renderManifestModule([], "", "", "metadata");
+
+    assert.equal(manifestEntryCount(module), 0);
+  });
+
+  it("refuses to call an unreadable manifest empty", () => {
+    // -1 rather than 0, so a caller stops instead of waving the commit through.
+    const damaged = "export const MANIFEST: TokenMetadata[] = [{oops];\n";
+
+    assert.equal(manifestEntryCount(damaged), -1);
   });
 });

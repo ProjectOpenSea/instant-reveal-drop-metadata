@@ -12,6 +12,7 @@
  */
 
 import type { TokenMetadata } from "./config.ts";
+import { redactError } from "./redact.ts";
 import { type Runtime, rpcHost } from "./runtime.ts";
 import { handleWebhook, isWebhookPath } from "./webhook.ts";
 
@@ -75,7 +76,7 @@ async function routeSafely(path: string, runtime: Runtime, url: URL): Promise<Re
   try {
     return await route(path, runtime, url);
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = redactError(error);
     runtime.mintState.recordError(detail);
 
     const tokenId = tokenIdFromPath(path);
@@ -131,7 +132,13 @@ async function route(path: string, runtime: Runtime, url: URL): Promise<Response
  */
 function tokenIdFromPath(path: string): number | null {
   const match = TOKEN_PATH.exec(path.slice(path.lastIndexOf("/") + 1));
-  return match ? Number(match[1]) : null;
+  if (!match?.[1]) return null;
+
+  // A token ID can be up to 78 digits on the wire, and Number() rounds anything
+  // past 2^53 to a different number than the one that was asked for. Nothing
+  // downstream should be reasoning about a value we silently changed.
+  const tokenId = Number(match[1]);
+  return Number.isSafeInteger(tokenId) ? tokenId : null;
 }
 
 async function serveToken(tokenId: number, runtime: Runtime): Promise<Response> {

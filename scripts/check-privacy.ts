@@ -17,7 +17,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { GREEN, RED, RESET } from "./shared.ts";
+import { GREEN, manifestEntryCount, RED, RESET } from "./shared.ts";
 
 const MANIFEST = "src/generated/manifest.ts";
 
@@ -38,18 +38,6 @@ function gitShow(ref: string): string | null {
   }
 }
 
-/** How many metadata entries a manifest source file declares. */
-function entryCount(source: string): number {
-  const match = /export const MANIFEST: TokenMetadata\[\] = (\[[\s\S]*?\]);\n/.exec(source);
-  if (!match?.[1]) return 0;
-  try {
-    return (JSON.parse(match[1]) as unknown[]).length;
-  } catch {
-    // Unparseable is not the same as empty, and we would rather stop than guess.
-    return -1;
-  }
-}
-
 const staged = gitShow(`:${MANIFEST}`);
 const committed = gitShow(`HEAD:${MANIFEST}`);
 
@@ -59,7 +47,7 @@ for (const [where, source] of [
   ["already committed", committed],
 ] as const) {
   if (source === null) continue;
-  const count = entryCount(source);
+  const count = manifestEntryCount(source);
   if (count !== 0) {
     problems.push(
       count < 0

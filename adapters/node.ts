@@ -29,6 +29,9 @@ try {
 const port = Number(process.env.PORT ?? 8787);
 const quiet = process.env.QUIET === "true";
 
+/** Matches the webhook handler's own limit, applied before anything buffers. */
+const MAX_REQUEST_BODY_BYTES = 2_000_000;
+
 let runtime: Runtime;
 try {
   runtime = createRuntime({ config, env: envFromRecord(process.env) });
@@ -80,7 +83,24 @@ async function serve(incoming: IncomingMessage, response: ServerResponse): Promi
   }
 
   const hasBody = method !== "GET" && method !== "HEAD";
-  const body = hasBody ? await readBody(incoming) : undefined;
+  let body: string | undefined;
+  if (hasBody) {
+    try {
+      body = await readBody(incoming);
+    } catch (error) {
+      const tooLarge = error instanceof BodyTooLargeError;
+      response.writeHead(tooLarge ? 413 : 400, {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+        connection: "close",
+      });
+      response.end(`${JSON.stringify({ error: tooLarge ? "body too large" : "bad request" })}\n`);
+      // Now the answer is on its way, stop whatever is still arriving.
+      incoming.destroy();
+      if (!quiet) console.log(`  ${method} ${url.pathname}  ${tooLarge ? 413 : 400}`);
+      return;
+    }
+  }
 
   let result: Response;
   try {
@@ -110,10 +130,39 @@ async function serve(incoming: IncomingMessage, response: ServerResponse): Promi
   }
 }
 
+class BodyTooLargeError extends Error {}
+
+/**
+ * Read a request body, and stop reading once it is clearly not one of ours.
+ *
+ * The webhook handler enforces its own limit, but it only sees the body after
+ * something has already held all of it in memory. On Node that something is
+ * this function, so the ceiling has to be here as well: without it a single
+ * POST of arbitrary length is enough to exhaust a self-hosted process, and
+ * `/webhook/mint` answers 404 on a server that never configured a webhook, so
+ * the request does not even have to be plausible.
+ */
 function readBody(incoming: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let size = 0;
+
+    let over = false;
+
+    incoming.on("data", (chunk: Buffer) => {
+      if (over) return;
+      size += chunk.length;
+      if (size > MAX_REQUEST_BODY_BYTES) {
+        // Stop reading, but leave the socket alive long enough to answer on it.
+        // Destroying here instead would reach the client as a connection reset
+        // with no status code, which is a worse thing to debug than a 413.
+        over = true;
+        incoming.pause();
+        reject(new BodyTooLargeError(`body exceeds ${MAX_REQUEST_BODY_BYTES} bytes`));
+        return;
+      }
+      chunks.push(chunk);
+    });
     incoming.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     incoming.on("error", reject);
   });

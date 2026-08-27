@@ -20,6 +20,7 @@
  */
 
 import type { ResolvedConfig } from "./config.ts";
+import { redact, redactError } from "./redact.ts";
 import type { RevealStore } from "./reveal-store.ts";
 import { type RpcClient, RpcTransportError, readTokenExists, readTotalSupply } from "./rpc.ts";
 
@@ -33,7 +34,9 @@ export type RevealReason =
   /** reveal.mode is "never". */
   | "reveal-none"
   /** We could not reach the chain, so we assumed the worst. */
-  | "rpc-unavailable";
+  | "rpc-unavailable"
+  /** Too many chain reads already in flight, so we assumed the worst. */
+  | "throttled";
 
 export type RevealDecision = {
   revealed: boolean;
@@ -48,11 +51,36 @@ export type MintStateStatus = {
   lastPollAt: string | null;
   lastWebhookAt: string | null;
   webhookMints: number;
+  /** Reads declined because too many were already in flight. "ownerOf" mode only. */
+  throttledChecks: number;
   lastError: string | null;
 };
 
+/** Raised instead of making a chain read we decided not to make. */
+export class ThrottledError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ThrottledError";
+  }
+}
+
 const BLOCK_NUMBER_TTL_MS = 6_000;
 const NEGATIVE_CACHE_LIMIT = 20_000;
+
+/**
+ * Ceiling on concurrent `ownerOf` reads.
+ *
+ * "ownerOf" mode spends one chain read per distinct token ID, so anything that
+ * walks the range once (a scraper, a marketplace reindexing your collection)
+ * turns one HTTP request into one RPC call, with nothing in between. That is
+ * your RPC bill, and your provider's rate limit, driven by whoever happens to
+ * be pointing at the server.
+ *
+ * Past the ceiling we answer without asking the chain, which withholds the
+ * token. Costing a reveal a few seconds is the right side to err on, and
+ * "sequential" mode never reaches this because one read answers every token.
+ */
+const MAX_INFLIGHT_TOKEN_CHECKS = 64;
 
 /**
  * How long to wait before retrying an RPC endpoint that just failed. Without
@@ -80,6 +108,7 @@ export class MintStateReader {
   private cachedBlockNumber: { value: number; atMs: number } | null = null;
   private lastWebhookAtMs: number | null = null;
   private webhookMints = 0;
+  private throttledChecks = 0;
   private lastError: string | null = null;
   private lastFailureAtMs: number | null = null;
   /**
@@ -114,7 +143,10 @@ export class MintStateReader {
       // because /status and the troubleshooting docs lean on this header.
       return { revealed: false, reason: this.lastReadFailed ? "rpc-unavailable" : "unminted" };
     } catch (error) {
-      this.lastError = error instanceof Error ? error.message : String(error);
+      // A throttle is a decision this server made, not a fault to report at
+      // /status. It has its own counter there instead.
+      if (error instanceof ThrottledError) return { revealed: false, reason: "throttled" };
+      this.lastError = redactError(error);
       return { revealed: false, reason: "rpc-unavailable" };
     }
   }
@@ -161,7 +193,7 @@ export class MintStateReader {
 
   /** Surface a failure raised outside this class, so /status reports it too. */
   recordError(message: string): void {
-    this.lastError = message;
+    this.lastError = redact(message);
   }
 
   status(): MintStateStatus {
@@ -173,6 +205,7 @@ export class MintStateReader {
       lastPollAt: this.lastPollAtMs ? new Date(this.lastPollAtMs).toISOString() : null,
       lastWebhookAt: this.lastWebhookAtMs ? new Date(this.lastWebhookAtMs).toISOString() : null,
       webhookMints: this.webhookMints,
+      throttledChecks: this.throttledChecks,
       lastError: this.lastError,
     };
   }
@@ -207,9 +240,7 @@ export class MintStateReader {
     try {
       return await this.store.getHighWater();
     } catch (error) {
-      this.lastError = `reveal store read failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`;
+      this.lastError = `reveal store read failed: ${redactError(error)}`;
       return null;
     }
   }
@@ -220,10 +251,16 @@ export class MintStateReader {
 
     // Back off from an endpoint that just failed, rather than retrying it once
     // per request for the length of the outage.
+    //
+    // This applies before the first successful read as well as after one. A
+    // drop with nothing minted yet has no high water mark to fall back on, and
+    // that is exactly when the server is busiest, so skipping the backoff there
+    // would hammer a struggling endpoint at the worst possible moment. The
+    // caller still gets "not minted", and `lastReadFailed` still makes it read
+    // as "rpc-unavailable" rather than a healthy "unminted".
     if (
       this.lastFailureAtMs !== null &&
-      Date.now() - this.lastFailureAtMs < RPC_FAILURE_COOLDOWN_MS &&
-      this.highWaterTokenId !== null
+      Date.now() - this.lastFailureAtMs < RPC_FAILURE_COOLDOWN_MS
     ) {
       return;
     }
@@ -243,7 +280,7 @@ export class MintStateReader {
           if (highest >= this.config.tokenIdStart) await this.shareHighWater(highest);
         }
       } catch (error) {
-        this.lastError = error instanceof Error ? error.message : String(error);
+        this.lastError = redactError(error);
         this.lastFailureAtMs = Date.now();
         this.lastReadFailed = true;
         // Keep whatever we already knew. If we knew nothing, the caller sees
@@ -269,9 +306,7 @@ export class MintStateReader {
     try {
       await this.store.bumpHighWater(tokenId);
     } catch (error) {
-      this.lastError = `reveal store write failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`;
+      this.lastError = `reveal store write failed: ${redactError(error)}`;
     }
   }
 
@@ -286,6 +321,13 @@ export class MintStateReader {
     const inflight = this.inflightTokenChecks.get(tokenId);
     if (inflight) return inflight;
 
+    if (this.inflightTokenChecks.size >= MAX_INFLIGHT_TOKEN_CHECKS) {
+      this.throttledChecks += 1;
+      throw new ThrottledError(
+        `${MAX_INFLIGHT_TOKEN_CHECKS} chain reads already in flight, so this one was not made`,
+      );
+    }
+
     const check = (async () => {
       try {
         const blockTag = await this.blockTag();
@@ -294,7 +336,14 @@ export class MintStateReader {
           this.mintedTokens.add(tokenId);
           this.unmintedUntilMs.delete(tokenId);
         } else {
-          if (this.unmintedUntilMs.size > NEGATIVE_CACHE_LIMIT) this.unmintedUntilMs.clear();
+          // Evict the oldest entries rather than emptying the map. Clearing it
+          // sends every token that was being withheld back to the chain at
+          // once, which is a stampede on a timer.
+          while (this.unmintedUntilMs.size >= NEGATIVE_CACHE_LIMIT) {
+            const oldest = this.unmintedUntilMs.keys().next();
+            if (oldest.done) break;
+            this.unmintedUntilMs.delete(oldest.value);
+          }
           this.unmintedUntilMs.set(tokenId, Date.now() + this.config.mintState.ttlSeconds * 1000);
         }
         this.lastPollAtMs = Date.now();
