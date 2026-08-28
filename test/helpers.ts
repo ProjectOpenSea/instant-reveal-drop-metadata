@@ -15,6 +15,13 @@ export const METADATA_URL = "https://metadata.test/drop";
 export type FakeChain = {
   /** Tokens tokenIdStart..(tokenIdStart + totalSupply - 1) are minted. */
   totalSupply: number;
+  /**
+   * What `getMintStats` reports as `_totalMinted()`. null mirrors totalSupply,
+   * which is a drop nobody has burned from. Set it higher to model burns.
+   */
+  totalMinted: number | null;
+  /** False makes `getMintStats` revert, as a non-SeaDrop contract would. */
+  supportsMintStats: boolean;
   /** Make every eth_call fail, to check the fail-closed behaviour. */
   down: boolean;
   /** How many JSON-RPC requests have been made. */
@@ -27,6 +34,8 @@ export type FakeChain = {
   ownerOfRaw: string | null;
   /** Raw hex to answer `totalSupply` with, instead of a well formed word. */
   totalSupplyRaw: string | null;
+  /** Raw hex to answer `getMintStats` with, instead of three well formed words. */
+  mintStatsRaw: string | null;
   /** Held open, every eth_call waits on it, so concurrency can be observed. */
   gate: Promise<void> | null;
 };
@@ -76,6 +85,31 @@ export function makeFakeFetch(chain: FakeChain): FetchLike {
 
         if (chain.gate) await chain.gate;
 
+        if (selector === "0x840e15d4") {
+          if (chain.mintStatsRaw !== null) {
+            return jsonResponse({ jsonrpc: "2.0", id: body.id, result: chain.mintStatsRaw }, 200);
+          }
+          if (!chain.supportsMintStats) {
+            return jsonResponse(
+              {
+                jsonrpc: "2.0",
+                id: body.id,
+                error: { code: 3, message: "execution reverted" },
+              },
+              200,
+            );
+          }
+          const minted = chain.totalMinted ?? chain.totalSupply;
+          // (minterNumMinted, currentTotalSupply, maxSupply)
+          return jsonResponse(
+            {
+              jsonrpc: "2.0",
+              id: body.id,
+              result: `0x${"".padStart(64, "0")}${hexWord(minted).slice(2)}${hexWord(1000).slice(2)}`,
+            },
+            200,
+          );
+        }
         if (selector === "0x18160ddd") {
           return jsonResponse(
             {
@@ -142,12 +176,15 @@ export function makeRuntime(
 ): { runtime: Runtime; chain: FakeChain } {
   const chain: FakeChain = {
     totalSupply: 0,
+    totalMinted: null,
+    supportsMintStats: true,
     down: false,
     rpcCalls: 0,
     metadataCalls: 0,
     metadataDown: false,
     ownerOfRaw: null,
     totalSupplyRaw: null,
+    mintStatsRaw: null,
     gate: null,
     ...options.chain,
   };
