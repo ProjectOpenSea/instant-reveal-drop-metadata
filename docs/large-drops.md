@@ -105,5 +105,27 @@ memory, and each instance pays that once.
 With a KV store bound, new instances read the shared high water mark instead,
 which removes most of the cold start cost. See [webhooks.md](webhooks.md).
 
-The shuffle costs nothing worth planning around: building the permutation for a
-50,000 token drop takes about 10ms, once per instance.
+### The shuffle, on a very large drop
+
+Building the permutation is one Fisher-Yates pass over `maxSupply` with BigInt
+arithmetic, done lazily on the first reveal request an instance serves, once per
+instance. Measured on Node 22:
+
+| tokens  | first reveal |
+| ------- | ------------ |
+| 1,000   | ~6ms         |
+| 10,000  | ~9ms         |
+| 50,000  | ~16ms        |
+| 100,000 | ~25ms        |
+
+That is fine everywhere except one place: the Cloudflare **free** plan caps a
+request at 10ms of CPU, and this is CPU, not waiting. Past roughly 10,000 tokens
+the first reveal each new instance serves can be killed for exceeding it, and
+because it is killed rather than caught, the caller gets a Cloudflare error page
+instead of the placeholder this server would otherwise fail closed to. The next
+request lands on a new instance and hits the same wall.
+
+So above about 10,000 tokens with the shuffle on, use the Workers paid plan
+(30s of CPU, so the cost disappears into the noise), or Vercel, or Node, none of
+which have a comparable per-request cap. Turning the shuffle off removes the work
+entirely: position maps straight to index, and nothing is built.
