@@ -22,6 +22,7 @@ import {
   readString,
   readSupportsInterface,
   readTokenExists,
+  readTotalMinted,
   readTotalSupply,
   SELECTORS,
 } from "../src/rpc.ts";
@@ -104,6 +105,38 @@ try {
   );
 } catch (error) {
   bad(`totalSupply() failed, and "sequential" mint state needs it: ${(error as Error).message}`);
+}
+
+// Whether burns can hide a minted token, which is a property of the contract
+// rather than of anything this repository can fix.
+if (resolved.mintState.mode === "sequential") {
+  try {
+    const minted = await readTotalMinted(client, resolved.contract);
+    if (minted === null) {
+      warn(
+        "this contract has no getMintStats(), so mint progress comes from totalSupply().\n" +
+          "        totalSupply() is minted minus burned, so if a holder burns during the mint\n" +
+          "        the newest tokens sit on the placeholder until that many more mints land,\n" +
+          "        and permanently if the drop never mints out. If burning is possible here,\n" +
+          '        run a webhook (docs/webhooks.md) or use mintState.mode "ownerOf".',
+      );
+    } else if (Number(minted) > resolved.maxSupply) {
+      warn(
+        `getMintStats() reports ${Number(minted).toLocaleString("en-US")} minted, which is more ` +
+          `than maxSupply (${resolved.maxSupply.toLocaleString("en-US")}).\n` +
+          "        The server will ignore that and read totalSupply() instead. Check that the " +
+          "contract address is the one this drop was configured for.",
+      );
+    } else {
+      const burned = Number(minted) - totalSupply;
+      ok(
+        `getMintStats() reports ${Number(minted).toLocaleString("en-US")} minted, so burns ` +
+          `cannot hide a token${burned > 0 ? ` (${burned.toLocaleString("en-US")} burned so far)` : ""}`,
+      );
+    }
+  } catch (error) {
+    warn(`getMintStats() could not be read: ${describe(error)}`);
+  }
 }
 
 if (totalSupply > 0) {

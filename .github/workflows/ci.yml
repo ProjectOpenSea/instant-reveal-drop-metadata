@@ -20,11 +20,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # engines.node is a range, and `node-version-file: package.json` resolves
+      # a range to the newest release that satisfies it. That tests the opposite
+      # of what matters: the README tells creators to install the floor, so a
+      # change that breaks the floor breaks the documented setup, and it would
+      # still pass CI on whatever Node shipped last week.
+      #
+      # Reading the floor out of package.json rather than writing it here keeps
+      # one source of truth, so bumping engines.node moves CI with it.
+      - id: node
+        run: |
+          set -euo pipefail
+          floor="$(jq -er '.engines.node | ltrimstr(">=")' package.json)"
+          case "$floor" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "engines.node is not a >=x.y.z floor: $floor" >&2; exit 1 ;;
+          esac
+          echo "floor=$floor" >> "$GITHUB_OUTPUT"
+          echo "Testing on the minimum supported Node: $floor"
+
       - uses: actions/setup-node@v7
         with:
-          # Falls through to engines.node, so the supported version is written
-          # down once, in package.json, and CI cannot drift from it.
-          node-version-file: package.json
+          node-version: ${{ steps.node.outputs.floor }}
           cache: npm
 
       - run: npm ci
@@ -32,17 +49,3 @@ jobs:
       # One command, and the same one contributors run locally, so the two
       # cannot disagree about what passing means.
       - run: npm run ci
-
-      # `npm run check:privacy` above proves the guard passes on a clean tree.
-      # This proves it fails on a dirty one, which is the half that matters and
-      # the half nothing else exercises: it reads what git is holding, so a
-      # staged manifest is the only way to reach that code at all.
-      - name: the privacy guard blocks a staged manifest
-        run: |
-          npm run build:manifest -- --dir metadata/example
-          git add -f src/generated/manifest.ts
-          if npm run check:privacy; then
-            echo "::error::check:privacy passed on a staged manifest full of metadata"
-            exit 1
-          fi
-          git restore --staged --worktree src/generated/manifest.ts

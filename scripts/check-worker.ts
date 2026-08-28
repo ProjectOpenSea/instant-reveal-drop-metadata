@@ -10,9 +10,17 @@
  *
  * `wrangler deploy --dry-run` needs no credentials, but it reports that problem
  * as a warning and still exits 0, so this reads its output and decides.
+ *
+ * Wrangler is a pinned devDependency and this runs the copy `npm ci` installed.
+ * Fetching it at run time instead (`npx --yes wrangler@4`) makes every CI run
+ * and every contributor's check depend on the network, and on whatever 4.x was
+ * published that morning, which is a build that can start failing without a
+ * commit.
  */
 
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { GREEN, RED, RESET } from "./shared.ts";
 
 /**
@@ -22,9 +30,23 @@ import { GREEN, RED, RESET } from "./shared.ts";
  */
 const BENIGN = [/Proxy environment variables detected/i];
 
+const binary = join(
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "wrangler.cmd" : "wrangler",
+);
+
+if (!existsSync(binary)) {
+  console.error(
+    `\n  ${RED}fail${RESET}  ${binary} is missing. Wrangler is a devDependency, so run\n` +
+      "        npm ci\n",
+  );
+  process.exit(1);
+}
+
 const result = spawnSync(
-  "npx",
-  ["--yes", "wrangler@4", "deploy", "--dry-run", "--outdir", "node_modules/.worker-check"],
+  binary,
+  ["deploy", "--dry-run", "--outdir", "node_modules/.worker-check"],
   { encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false" } },
 );
 

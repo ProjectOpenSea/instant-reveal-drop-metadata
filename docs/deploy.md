@@ -1,7 +1,9 @@
 # Deploying
 
-Five options, in the order most people should consider them. All serve the same
-code from `src/handler.ts`.
+> Five hosts, in the order most people should consider them, and the one command
+> to run against each afterwards.
+
+All five serve the same code from `src/handler.ts`.
 
 | Option | Account needed | Good for |
 | --- | --- | --- |
@@ -17,7 +19,7 @@ One command, no build step, and the free plan is enough for a normal drop.
 
 ```bash
 npm run build:manifest
-npx wrangler deploy
+npm run deploy
 ```
 
 The first run opens a browser to authorise the CLI and prints a `*.workers.dev`
@@ -44,17 +46,9 @@ pick it before pointing the contract at anything.
 
 ### Sharing mint progress between instances
 
-Only worth doing if you run a webhook. Cloudflare runs many independent copies of
-your worker and a delivery reaches one of them. Without a shared store the others
-catch up on their next poll, which is correct but slower than the webhook you set
-up.
-
-```bash
-npx wrangler kv namespace create REVEAL_STATE
-```
-
-Paste the id it prints into the `kv_namespaces` block in `wrangler.toml` and
-redeploy. `/status` will then show `revealStore: Cloudflare KV`.
+Only worth doing if you run a webhook, and worth less than it sounds. Setup and
+the honest version of what it buys you are in
+[webhooks.md](webhooks.md#serverless-hosts-need-one-more-step).
 
 ## Vercel
 
@@ -99,20 +93,12 @@ drop. Not for a real mint: the URL disappears when you close your laptop, and a
 
 ```bash
 npm run dev
-```
-
-Then, in a second terminal:
-
-```bash
-npx cloudflared tunnel --url http://localhost:8787
+npx cloudflared tunnel --url http://localhost:8787   # second terminal
 ```
 
 That prints a `https://something-random.trycloudflare.com` URL, live immediately,
-no account and no login. Point your test drop's `baseURI` at it with a trailing
-slash and you are done. `brew install cloudflared` works too.
-
-GitHub Codespaces forwarded ports do the same job: run `npm run dev` there and
-set the port's visibility to public.
+no account and no login. GitHub Codespaces forwarded ports do the same job, with
+the port set to public.
 
 Full walkthrough, including minting and watching the reveal land, in
 [test-run.md](test-run.md).
@@ -135,5 +121,5 @@ cast send <contract> "setBaseURI(string)" "https://your-server/" \
 ```
 
 `setBaseURI` is also callable from Etherscan's write tab with the owner wallet
-connected. Then run preflight once more, so the server and the contract are
-checked against each other after both are pointed at each other.
+connected. Run preflight once more afterwards, so the two are checked against
+each other now that they point at each other.

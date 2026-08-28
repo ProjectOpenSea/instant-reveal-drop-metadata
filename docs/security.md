@@ -1,16 +1,18 @@
 # Security, and what is actually hidden
 
-Read this before a real mint.
+> The threat model, the ways a metadata set leaks anyway, and what each secret
+> is worth. This page owns what is and is not hidden. Read it before a real
+> mint.
 
 ## The threat
 
 Someone wants to know which token ID holds the good piece, before it mints.
 
 SeaDrop mints IDs in order, so a minter cannot choose their token ID. That does
-not settle it: knowing the mapping lets you watch `totalSupply` and mint at the
-moment the next ID is a rare one. The mapping is the secret, and timing is the
-attack. Publishing your metadata directory to IPFS beforehand hands the mapping
-over completely.
+not settle it: knowing the mapping lets you watch the supply climb and mint at
+the moment the next ID is a rare one. The mapping is the secret, and timing is
+the attack. Publishing your metadata directory to IPFS beforehand hands the
+mapping over completely.
 
 ## What this server hides
 
@@ -95,23 +97,22 @@ send yourself.
 
 ## Design choices that exist for safety
 
-The server fails closed. No chain access, no reveal. Nor does a metadata source
-that errors: the placeholder is served instead of a 500, so a marketplace never
-records a broken token. Failures make reveals late, never early.
+The mechanics are in [how-it-works.md](how-it-works.md); what they buy you is:
 
-A token's artwork depends only on its ID, fixed before the mint. A reorg can
-reveal one token a few seconds early, and cannot show the wrong artwork.
-
-A reveal is one way. The high water mark only rises, so a burn, a lagging RPC
-node, or a replayed webhook cannot un-reveal a token buyers have already seen.
-
-Unrevealed responses are not cacheable, so no CDN can strand a placeholder on a
-token that has minted.
-
-`/status` and `/provenance` are safe to hand to anyone. Neither includes a secret,
-and the seed appears at `/provenance` only when you set `PUBLISH_SEED=true`.
+- It fails closed. No chain access, or a metadata source that errors, means the
+  placeholder rather than a 500 or a guess. Failures make reveals late, never
+  early.
+- Artwork depends only on token ID, fixed before the mint. A reorg can reveal one
+  token a few seconds early, and can never show the wrong artwork.
+- A reveal is one way. The high water mark only rises, so a burn, a lagging RPC
+  node, or a replayed webhook cannot un-reveal a token buyers have seen.
+- Unrevealed responses are not cacheable, so no CDN can strand a placeholder on a
+  token that has minted.
+- `/status` and `/provenance` are safe to hand to anyone. Neither includes a
+  secret, and the seed appears at `/provenance` only when you set
+  `PUBLISH_SEED=true`.
 
 ## Reporting something
 
-Open an issue, or for anything you would rather not post publicly, use
-GitHub's private vulnerability reporting on this repository.
+Open an issue, or for anything you would rather not post publicly, use GitHub's
+private vulnerability reporting on this repository.

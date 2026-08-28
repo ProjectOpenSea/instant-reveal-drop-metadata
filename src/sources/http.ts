@@ -16,7 +16,7 @@
 import type { ResolvedConfig, TokenMetadata } from "../config.ts";
 import type { Env } from "../env.ts";
 import type { FetchLike } from "../rpc.ts";
-import { type MetadataSource, renderPath } from "./index.ts";
+import { createIndexLoader, type MetadataSource, renderPath } from "./index.ts";
 
 export function createHttpSource(
   config: ResolvedConfig,
@@ -28,28 +28,24 @@ export function createHttpSource(
   const template = config.metadata.pathTemplate;
   const doFetch: FetchLike = fetchImpl ?? ((input, init) => fetch(input, init));
 
-  const cache = new Map<number, TokenMetadata>();
+  const load = createIndexLoader<TokenMetadata>(async (index) => {
+    const url = `${base}/${renderPath(template, index)}`;
+    const response = await doFetch(url, {
+      headers: authorization ? { authorization } : undefined,
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw new Error(`metadata source returned HTTP ${response.status} for index ${index}`);
+    }
+    return (await response.json()) as TokenMetadata;
+  });
 
   return {
     kind: "http",
     async get(index: number) {
       if (!base) return null;
-      const cached = cache.get(index);
-      if (cached) return cached;
-
-      const url = `${base}/${renderPath(template, index)}`;
-      const response = await doFetch(url, {
-        headers: authorization ? { authorization } : undefined,
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (response.status === 404) return null;
-      if (!response.ok) {
-        throw new Error(`metadata source returned HTTP ${response.status} for index ${index}`);
-      }
-
-      const parsed = (await response.json()) as TokenMetadata;
-      cache.set(index, parsed);
-      return parsed;
+      return load(index);
     },
     size() {
       return null;

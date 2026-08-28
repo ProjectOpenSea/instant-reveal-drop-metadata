@@ -3,7 +3,7 @@
  *
  * There are two ways to find out, and this server uses both.
  *
- *   polling   a `totalSupply()` read every few seconds. Always works, needs no
+ *   polling   one mint-count read every few seconds. Always works, needs no
  *             setup, and is the floor on how late a reveal can be.
  *   webhook   a push from your node provider the moment the mint lands. Faster,
  *             optional, and never trusted to say a token is *not* minted.
@@ -15,14 +15,20 @@
  *    undone, so an outage costs you a late reveal, never an early one.
  *
  * 2. Never un-mint a token. Once a token is known minted we remember it, even
- *    if a later read disagrees (a burn lowers `totalSupply`, and RPC nodes
- *    behind a load balancer sometimes answer from an older block).
+ *    if a later read disagrees, because RPC nodes behind a load balancer
+ *    sometimes answer from an older block.
  */
 
 import type { ResolvedConfig } from "./config.ts";
 import { redact, redactError } from "./redact.ts";
 import type { RevealStore } from "./reveal-store.ts";
-import { type RpcClient, RpcTransportError, readTokenExists, readTotalSupply } from "./rpc.ts";
+import {
+  type RpcClient,
+  RpcTransportError,
+  readTokenExists,
+  readTotalMinted,
+  readTotalSupply,
+} from "./rpc.ts";
 
 export type RevealReason =
   /** The token is minted, here is the real metadata. */
@@ -38,6 +44,15 @@ export type RevealReason =
   /** Too many chain reads already in flight, so we assumed the worst. */
   | "throttled";
 
+/**
+ * Which contract call answers "how many tokens have been minted".
+ *
+ *   unknown       not probed yet
+ *   mint-stats    getMintStats(address), whose second value is `_totalMinted()`
+ *   total-supply  totalSupply(), which a burn lowers
+ */
+export type SupplyReader = "unknown" | "mint-stats" | "total-supply";
+
 export type RevealDecision = {
   revealed: boolean;
   reason: RevealReason;
@@ -47,7 +62,10 @@ export type MintStateStatus = {
   mode: string;
   store: string;
   highestMintedTokenId: number | null;
-  totalSupply: number | null;
+  /** Tokens minted so far. Burn-immune where the contract allows it. */
+  mintedCount: number | null;
+  /** Which contract read produced `mintedCount`. See `readMintedCount`. */
+  supplyReader: SupplyReader;
   lastPollAt: string | null;
   lastWebhookAt: string | null;
   webhookMints: number;
@@ -96,7 +114,8 @@ export class MintStateReader {
 
   // Sequential mode state.
   private highWaterTokenId: number | null = null;
-  private lastTotalSupply: number | null = null;
+  private lastMintedCount: number | null = null;
+  private supplyReader: SupplyReader = "unknown";
   private lastPollAtMs: number | null = null;
   private supplyRefresh: Promise<void> | null = null;
 
@@ -201,7 +220,8 @@ export class MintStateReader {
       mode: this.config.mintState.mode,
       store: this.store.kind,
       highestMintedTokenId: this.highWaterTokenId,
-      totalSupply: this.lastTotalSupply,
+      mintedCount: this.lastMintedCount,
+      supplyReader: this.supplyReader,
       lastPollAt: this.lastPollAtMs ? new Date(this.lastPollAtMs).toISOString() : null,
       lastWebhookAt: this.lastWebhookAtMs ? new Date(this.lastWebhookAtMs).toISOString() : null,
       webhookMints: this.webhookMints,
@@ -214,7 +234,7 @@ export class MintStateReader {
 
   /**
    * SeaDrop hands out token IDs in order, so one number answers every token.
-   * A single `totalSupply()` read per TTL window serves the whole collection,
+   * A single mint-count read per TTL window serves the whole collection,
    * however much traffic arrives.
    */
   private async isMintedSequential(tokenId: number): Promise<boolean> {
@@ -268,9 +288,9 @@ export class MintStateReader {
     const run = (async () => {
       try {
         const blockTag = await this.blockTag();
-        const total = Number(await readTotalSupply(this.client, this.config.contract, blockTag));
+        const total = await this.readMintedCount(blockTag);
         const highest = Math.min(this.config.tokenIdStart + total - 1, this.config.tokenIdEnd);
-        this.lastTotalSupply = total;
+        this.lastMintedCount = total;
         this.lastPollAtMs = Date.now();
         this.lastError = null;
         this.lastFailureAtMs = null;
@@ -295,6 +315,39 @@ export class MintStateReader {
 
     this.supplyRefresh = run;
     return run;
+  }
+
+  /**
+   * How many tokens have been minted, preferring the count a burn cannot lower.
+   *
+   * `totalSupply()` on ERC721A is minted minus burned, and sequential mode
+   * turns the count into "every token ID up to here exists". Those two
+   * disagree the moment anyone burns: with one token burned, the highest
+   * minted ID sits on the placeholder until the next mint replaces it, and
+   * forever if the drop never mints out. Nothing recovers it, because the
+   * chain is answering honestly and the answer is the wrong question.
+   *
+   * `getMintStats` asks the right one. It is probed once, on the first read,
+   * and a contract that does not have it is remembered so the extra call is
+   * not repeated for the life of the process.
+   *
+   * The result is only trusted while it fits inside the drop. A count past
+   * `maxSupply` is not a mint count: either the configured contract is not the
+   * one this server was built for, or some unrelated function answers to the
+   * same four bytes. Either way `highest` is clamped to `tokenIdEnd` a few
+   * lines later, so believing it would reveal the entire collection at once.
+   */
+  private async readMintedCount(blockTag: string): Promise<number> {
+    if (this.supplyReader !== "total-supply") {
+      const minted = await readTotalMinted(this.client, this.config.contract, blockTag);
+      if (minted !== null && minted >= 0n && minted <= BigInt(this.config.maxSupply)) {
+        this.supplyReader = "mint-stats";
+        return Number(minted);
+      }
+      this.supplyReader = "total-supply";
+    }
+
+    return Number(await readTotalSupply(this.client, this.config.contract, blockTag));
   }
 
   /**

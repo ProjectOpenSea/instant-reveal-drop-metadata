@@ -30,6 +30,7 @@ function webhookResponse(body: Record<string, unknown>, status: number): Respons
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
     },
   });
 }
@@ -93,7 +94,11 @@ async function routeSafely(path: string, runtime: Runtime, url: URL): Promise<Re
 async function route(path: string, runtime: Runtime, url: URL): Promise<Response> {
   switch (path) {
     case "":
-      return json(indexBody(runtime, url), { cacheControl: "public, max-age=60" });
+      // The body quotes the request's own Host back at the caller, so a shared
+      // cache keyed on path alone would hand one host's answer to another, and
+      // a forged Host header would decide what it says. It is a human-readable
+      // index, not a hot path, so it is not worth caching.
+      return json(indexBody(runtime, url), { cacheControl: "no-store" });
     case "/health":
       return new Response("ok\n", {
         status: 200,
@@ -101,6 +106,7 @@ async function route(path: string, runtime: Runtime, url: URL): Promise<Response
           ...CORS_HEADERS,
           "content-type": "text/plain; charset=utf-8",
           "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
         },
       });
     case "/status":
@@ -311,6 +317,11 @@ function json(
       ...options.headers,
       "content-type": "application/json; charset=utf-8",
       "cache-control": options.cacheControl,
+      // Metadata is attacker-influenced by definition: a creator's own JSON is
+      // served verbatim, from a domain that will be linked all over a
+      // marketplace. Say it is JSON and mean it, rather than letting a browser
+      // sniff a body into something it will execute.
+      "x-content-type-options": "nosniff",
     },
   });
 }

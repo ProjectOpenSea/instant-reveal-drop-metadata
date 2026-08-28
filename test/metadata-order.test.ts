@@ -46,7 +46,61 @@ describe("ordering a metadata set", () => {
   });
 
   it("accepts a single file", () => {
-    assert.deepEqual(orderMetadataFiles(["7.json"], DIR), ["7.json"]);
+    assert.deepEqual(orderMetadataFiles(["1.json"], DIR), ["1.json"]);
+    assert.deepEqual(orderMetadataFiles(["0.json"], DIR), ["0.json"]);
+  });
+
+  it("reads a 1-based set in order", () => {
+    assert.deepEqual(orderMetadataFiles(["2.json", "3.json", "1.json"], DIR), [
+      "1.json",
+      "2.json",
+      "3.json",
+    ]);
+  });
+
+  it("reads a 0-based set in order", () => {
+    assert.deepEqual(orderMetadataFiles(["2.json", "0.json", "1.json"], DIR), [
+      "0.json",
+      "1.json",
+      "2.json",
+    ]);
+  });
+});
+
+describe("a set that does not start where it should", () => {
+  it("rejects an offset set, which nothing else here would catch", () => {
+    // 5.json through 8.json has no gaps, no duplicates, and the entry count a
+    // four token drop expects. Every other guard passes while token 1 gets
+    // 5.json and the whole collection shifts by four.
+    assert.throws(
+      () => orderMetadataFiles(["5.json", "6.json", "7.json", "8.json"], DIR),
+      (error: unknown) =>
+        error instanceof MetadataOrderError && /starts at 5/.test((error as Error).message),
+    );
+  });
+
+  it("says what it should have started at", () => {
+    try {
+      orderMetadataFiles(["5.json", "6.json"], DIR);
+      assert.fail("expected a MetadataOrderError");
+    } catch (error) {
+      assert.match((error as Error).message, /start at 0 or 1/);
+    }
+  });
+
+  it("rejects a lone file that is not the first position", () => {
+    assert.throws(
+      () => orderMetadataFiles(["7.json"], DIR),
+      (error: unknown) => error instanceof MetadataOrderError,
+    );
+  });
+
+  it("rejects a set numbered from 2, which is the off-by-one people actually make", () => {
+    assert.throws(
+      () => orderMetadataFiles(["2.json", "3.json", "4.json"], DIR),
+      (error: unknown) =>
+        error instanceof MetadataOrderError && /starts at 2/.test((error as Error).message),
+    );
   });
 });
 

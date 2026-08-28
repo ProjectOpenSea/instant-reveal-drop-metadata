@@ -15,6 +15,13 @@ export const METADATA_URL = "https://metadata.test/drop";
 export type FakeChain = {
   /** Tokens tokenIdStart..(tokenIdStart + totalSupply - 1) are minted. */
   totalSupply: number;
+  /**
+   * What `getMintStats` reports as `_totalMinted()`. null mirrors totalSupply,
+   * which is a drop nobody has burned from. Set it higher to model burns.
+   */
+  totalMinted: number | null;
+  /** False makes `getMintStats` revert, as a non-SeaDrop contract would. */
+  supportsMintStats: boolean;
   /** Make every eth_call fail, to check the fail-closed behaviour. */
   down: boolean;
   /** How many JSON-RPC requests have been made. */
@@ -23,10 +30,14 @@ export type FakeChain = {
   metadataCalls: number;
   /** Make the metadata source return a server error, to check the fallback. */
   metadataDown: boolean;
+  /** Indexes the metadata source answers 404 for, as an unuploaded file would. */
+  metadataMissing: number[];
   /** Raw hex to answer `ownerOf` with, instead of a well formed word. */
   ownerOfRaw: string | null;
   /** Raw hex to answer `totalSupply` with, instead of a well formed word. */
   totalSupplyRaw: string | null;
+  /** Raw hex to answer `getMintStats` with, instead of three well formed words. */
+  mintStatsRaw: string | null;
   /** Held open, every eth_call waits on it, so concurrency can be observed. */
   gate: Promise<void> | null;
 };
@@ -76,6 +87,31 @@ export function makeFakeFetch(chain: FakeChain): FetchLike {
 
         if (chain.gate) await chain.gate;
 
+        if (selector === "0x840e15d4") {
+          if (chain.mintStatsRaw !== null) {
+            return jsonResponse({ jsonrpc: "2.0", id: body.id, result: chain.mintStatsRaw }, 200);
+          }
+          if (!chain.supportsMintStats) {
+            return jsonResponse(
+              {
+                jsonrpc: "2.0",
+                id: body.id,
+                error: { code: 3, message: "execution reverted" },
+              },
+              200,
+            );
+          }
+          const minted = chain.totalMinted ?? chain.totalSupply;
+          // (minterNumMinted, currentTotalSupply, maxSupply)
+          return jsonResponse(
+            {
+              jsonrpc: "2.0",
+              id: body.id,
+              result: `0x${"".padStart(64, "0")}${hexWord(minted).slice(2)}${hexWord(1000).slice(2)}`,
+            },
+            200,
+          );
+        }
         if (selector === "0x18160ddd") {
           return jsonResponse(
             {
@@ -118,6 +154,9 @@ export function makeFakeFetch(chain: FakeChain): FetchLike {
       if (!Number.isInteger(index) || index < 0 || index > 999) {
         return new Response("not found", { status: 404 });
       }
+      if (chain.metadataMissing.includes(index)) {
+        return new Response("not found", { status: 404 });
+      }
       return jsonResponse(
         {
           name: `Artwork ${index}`,
@@ -142,12 +181,16 @@ export function makeRuntime(
 ): { runtime: Runtime; chain: FakeChain } {
   const chain: FakeChain = {
     totalSupply: 0,
+    totalMinted: null,
+    supportsMintStats: true,
     down: false,
     rpcCalls: 0,
     metadataCalls: 0,
     metadataDown: false,
+    metadataMissing: [],
     ownerOfRaw: null,
     totalSupplyRaw: null,
+    mintStatsRaw: null,
     gate: null,
     ...options.chain,
   };
@@ -193,6 +236,27 @@ export function makeFakeKv(): KvLike & { writes: string[]; now: number } {
       return state.value;
     },
     async put(_key: string, value: string): Promise<void> {
+      state.writes.push(value);
+      state.value = value;
+    },
+  };
+  return state;
+}
+
+/**
+ * A KV namespace whose writes fail until `failingWrites` is turned off, so a
+ * value dropped by a failed write can be looked for afterwards.
+ */
+export function makeFlakyKv(): KvLike & { writes: string[]; failingWrites: boolean } {
+  const state = {
+    writes: [] as string[],
+    failingWrites: true,
+    value: null as string | null,
+    async get(_key: string): Promise<string | null> {
+      return state.value;
+    },
+    async put(_key: string, value: string): Promise<void> {
+      if (state.failingWrites) throw new Error("kv is having a moment");
       state.writes.push(value);
       state.value = value;
     },

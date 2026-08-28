@@ -1,7 +1,8 @@
 # Verifying a shuffle
 
-For a holder who wants to check the creator did not reorder the good pieces, and
-for a creator who wants to be able to prove it.
+> The algorithm written out, plus a standalone script, so a holder can recompute
+> the mapping and a creator can prove they did not reorder the good pieces.
+> Why you would turn the shuffle on at all is in [security.md](security.md).
 
 ## What was promised
 

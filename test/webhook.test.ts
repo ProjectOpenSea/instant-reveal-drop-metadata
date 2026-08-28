@@ -96,6 +96,59 @@ describe("the generic webhook", () => {
     assert.equal((await handleRequest(get("/5"), runtime)).headers.get("x-reveal-state"), "minted");
   });
 
+  it("refuses a supply cursor in ownerOf mode, rather than half applying it", async () => {
+    // The field means "everything through n is minted". ownerOf mode never
+    // reads a high water mark, so applying it would reveal token 5 alone and
+    // silently drop the part the sender cared about.
+    const { runtime } = makeRuntime({
+      chain: { totalSupply: 0 },
+      env: { WEBHOOK_SECRET: SECRET },
+      config: { mintState: { mode: "ownerOf", ttlSeconds: 10 } },
+    });
+
+    const response = await handleRequest(
+      post("/webhook/mint", { revealedThrough: 5 }, { authorization: `Bearer ${SECRET}` }),
+      runtime,
+    );
+    const body = (await response.json()) as { error: string };
+
+    assert.equal(response.status, 400);
+    assert.match(body.error, /sequential/);
+    assert.match(body.error, /tokenIds/);
+  });
+
+  it("reveals nothing when it refuses a supply cursor", async () => {
+    const { runtime } = makeRuntime({
+      chain: { totalSupply: 0 },
+      env: { WEBHOOK_SECRET: SECRET },
+      config: { mintState: { mode: "ownerOf", ttlSeconds: 10 } },
+    });
+
+    await handleRequest(
+      post("/webhook/mint", { revealedThrough: 5 }, { authorization: `Bearer ${SECRET}` }),
+      runtime,
+    );
+
+    const state = (await handleRequest(get("/5"), runtime)).headers.get("x-reveal-state");
+    assert.equal(state, "unminted");
+  });
+
+  it("still takes individual ids in ownerOf mode", async () => {
+    const { runtime } = makeRuntime({
+      chain: { totalSupply: 0 },
+      env: { WEBHOOK_SECRET: SECRET },
+      config: { mintState: { mode: "ownerOf", ttlSeconds: 10 } },
+    });
+
+    const response = await handleRequest(
+      post("/webhook/mint", { tokenIds: [5] }, { authorization: `Bearer ${SECRET}` }),
+      runtime,
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal((await handleRequest(get("/5"), runtime)).headers.get("x-reveal-state"), "minted");
+  });
+
   it("ignores token ids that are not part of this drop", async () => {
     const { runtime } = makeRuntime({
       chain: { totalSupply: 0 },

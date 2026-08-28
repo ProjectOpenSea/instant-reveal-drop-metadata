@@ -7,6 +7,7 @@
  *
  *   ownerOf(uint256)          0x6352211e
  *   totalSupply()             0x18160ddd
+ *   getMintStats(address)     0x840e15d4
  *   maxSupply()               0xd5abeb01
  *   baseURI()                 0x6c0360eb
  *   owner()                   0x8da5cb5b
@@ -21,6 +22,7 @@
 export const SELECTORS = {
   ownerOf: "0x6352211e",
   totalSupply: "0x18160ddd",
+  getMintStats: "0x840e15d4",
   maxSupply: "0xd5abeb01",
   baseURI: "0x6c0360eb",
   owner: "0x8da5cb5b",
@@ -135,6 +137,14 @@ export function encodeUint256(selector: string, value: number | bigint): string 
   return selector + BigInt(value).toString(16).padStart(64, "0");
 }
 
+/** The zero address, used where a call needs an address argument it ignores. */
+export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/** Encode one address argument, left-padded to a 32-byte word. */
+export function encodeAddress(selector: string, value: string): string {
+  return selector + value.replace(/^0x/, "").toLowerCase().padStart(64, "0");
+}
+
 /** Encode one bytes4 argument (for supportsInterface). */
 export function encodeBytes4(selector: string, value: string): string {
   const clean = value.replace(/^0x/, "").padEnd(8, "0").slice(0, 8);
@@ -204,6 +214,65 @@ export async function readTotalSupply(
   blockTag?: string,
 ): Promise<bigint> {
   return decodeUint256(await client.call(contract, SELECTORS.totalSupply, blockTag));
+}
+
+/**
+ * How many tokens the contract has ever minted, which is not the same number as
+ * `totalSupply()`.
+ *
+ * ERC721A, which every OpenSea Studio drop is built on, defines them as
+ *
+ *   totalSupply()  = _currentIndex - _burnCounter - _startTokenId()
+ *   _totalMinted() = _currentIndex - _startTokenId()
+ *
+ * so a burn lowers the first and leaves the second alone. Sequential mint state
+ * needs the second: it turns a count into "token IDs up to here are minted",
+ * and that statement does not stop being true when a holder burns one.
+ *
+ * `_totalMinted()` is internal, and the public `totalMinted()` some ERC721A
+ * forks add is not on the Studio contracts (calling it reverts). SeaDrop does
+ * expose it, indirectly, through the mint-stats getter it needs for its own
+ * supply checks:
+ *
+ *   function getMintStats(address minter) external view
+ *     returns (uint256 minterNumMinted, uint256 currentTotalSupply, uint256 maxSupply)
+ *
+ * where `currentTotalSupply` is `_totalMinted()`. We read it with the zero
+ * address, because only the second word is wanted and `_numberMinted(address(0))`
+ * is a plain storage read of an empty slot.
+ *
+ * Returns null when the contract does not implement it, so the caller can fall
+ * back to `totalSupply()` rather than fail closed on every request.
+ */
+export async function readTotalMinted(
+  client: RpcClient,
+  contract: string,
+  blockTag?: string,
+): Promise<bigint | null> {
+  let result: string;
+  try {
+    result = await client.call(
+      contract,
+      encodeAddress(SELECTORS.getMintStats, ZERO_ADDRESS),
+      blockTag,
+    );
+  } catch (error) {
+    // A revert is "this contract has no such function", which is a fact about
+    // the contract rather than a failure. A transport error is not, and has to
+    // reach the caller so it can fail closed.
+    if (error instanceof RevertError) return null;
+    throw error;
+  }
+
+  // Some endpoints answer a reverted eth_call with 0x and no error at all.
+  if (isEmptyReturnData(result)) return null;
+
+  const clean = result.replace(/^0x/, "");
+  // Three words. Anything shorter is not this function's return value, and
+  // guessing at a truncated reply is how a garbled answer becomes a wrong one.
+  if (clean.length < 192) return null;
+
+  return hexWordToBigInt(clean.slice(64, 128), "a mint count");
 }
 
 /**

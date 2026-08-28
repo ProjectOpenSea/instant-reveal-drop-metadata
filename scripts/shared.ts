@@ -96,6 +96,23 @@ export function orderMetadataFiles(names: readonly string[], dir: string): strin
   }
 
   const positions = [...byPosition.keys()].sort((a, b) => a - b);
+
+  // Where the set starts is the other half of what position means, and it is
+  // the half nothing else here checks. A set named 5.json through 1004.json has
+  // no gaps, no duplicates, and exactly maxSupply entries, so every other guard
+  // passes while the first token quietly gets 5.json and the whole collection
+  // shifts by four. Only 0-based and 1-based sets are unambiguous.
+  const lowest = positions[0] as number;
+  if (lowest !== 0 && lowest !== 1) {
+    throw new MetadataOrderError(
+      `${dir} starts at ${lowest}, and a metadata set has to start at 0 or 1.\n` +
+        `  Position decides which token gets which artwork, so this set would put ` +
+        `${lowest}.json on the first token and shift every token after it.\n` +
+        `  Renumber the set from 0 or from 1, or put it in a single manifest.json array ` +
+        `where the order is explicit rather than inferred from the names.`,
+    );
+  }
+
   const missing: number[] = [];
   for (let i = 1; i < positions.length; i++) {
     const previous = positions[i - 1] as number;
