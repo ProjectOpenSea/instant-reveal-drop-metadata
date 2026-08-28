@@ -1,5 +1,9 @@
 # Webhooks
 
+> Optional. Turns a ten second reveal into a one second one by having your node
+> provider push mints instead of the server polling for them. Also covers the
+> shared store serverless hosts need, and what it really buys you.
+
 Polling gets a reveal out within `mintState.ttlSeconds`, 10 seconds by default. A
 webhook gets it out in about one, by having your node provider tell the server
 about a mint instead of the server asking.
@@ -13,20 +17,19 @@ has no unauthenticated write surface.
 
 ## What a webhook can and cannot do
 
-It can raise the high water mark, which reveals tokens.
+It can raise the high water mark, which reveals tokens. It cannot lower it, hide
+a token, or change which artwork a token maps to, so a duplicate, out of order,
+or replayed delivery is harmless.
 
-It cannot lower it, hide a token, or change which artwork a token maps to. A
-duplicate, out of order, or replayed delivery is harmless.
+That asymmetry is the risk, too: a leaked webhook secret buys an attacker an
+early reveal and nothing else. If you would rather not carry even that, leave
+webhooks off. Polling is at most ten seconds behind.
 
-That asymmetry is also the risk to understand: a leaked webhook secret buys an
-attacker the ability to reveal your drop early, and nothing else. If you would
-rather not carry that, leave webhooks off. Polling is at most ten seconds behind.
-
-One caveat with `mintState.mode: "sequential"`. That mode treats one token ID as
-a cursor, so a delivery for token 900 reveals 1 through 900. That is correct for
-SeaDrop, which mints in order. If your contract can mint out of order, an
-owner-minted reserve at the top of the range would reveal the whole drop, so use
-`ownerOf` mode, which records the exact IDs a webhook names and nothing else.
+One caveat in `sequential` mode. It treats a token ID as a cursor, so a delivery
+for token 900 reveals 1 through 900. Correct for SeaDrop, which mints in order,
+and wrong for a contract that does not: an owner-minted reserve at the top of the
+range would reveal the whole drop. Use `ownerOf` mode there, which records the
+exact IDs a delivery names and nothing else.
 
 ## Alchemy
 
@@ -51,10 +54,10 @@ Then check it is on:
 curl -s https://your-server/status | grep -A3 webhooks
 ```
 
-Custom Webhooks work as well. The server reads token IDs out of whichever shape
-arrives: `erc721TokenId` fields on activity entries, and raw `Transfer` logs from
-a GraphQL webhook. Anything not for your contract is ignored. Address Activity
-webhooks work too, though NFT Activity is the closer fit.
+Custom Webhooks and Address Activity work as well, though NFT Activity is the
+closer fit. The server reads token IDs out of whichever shape arrives,
+`erc721TokenId` fields on activity entries and raw `Transfer` logs from a GraphQL
+webhook, and ignores anything not for your contract.
 
 ### Verifying a delivery yourself
 
@@ -82,6 +85,12 @@ Then any of these bodies work:
 { "revealedThrough": 512 }     // everything up to 512 is minted
 ```
 
+`revealedThrough` is a cursor for an indexer that tracks supply rather than
+individual mints, and it only means anything in `sequential` mode, since that is
+the only mode that reads a high water mark. In `ownerOf` mode the server answers
+400 rather than revealing token 512 alone and quietly dropping the "through"
+part; send the ids individually there.
+
 ```bash
 curl -X POST https://your-server/webhook/mint \
   -H "Authorization: Bearer $WEBHOOK_SECRET" \
@@ -101,15 +110,15 @@ The reply tells you what it did:
 }
 ```
 
-`tokenIdsApplied` counts the IDs inside your drop's range. If it comes back 0,
-they were outside `tokenIdStart` to `tokenIdStart + maxSupply - 1`, and you
-probably have `tokenIdStart` wrong.
+`tokenIdsApplied` counts the IDs inside your drop's range. A 0 means they were
+all outside `tokenIdStart` to `tokenIdStart + maxSupply - 1`, so `tokenIdStart`
+is probably wrong.
 
 ## Serverless hosts need one more step
 
 Cloudflare and Vercel run many independent copies of your code, and a delivery
-arrives at one of them. That copy reveals the token straight away. The others
-find out on their next poll unless you give them somewhere shared to look.
+arrives at one. That copy reveals the token straight away; the others find out on
+their next poll unless you give them somewhere shared to look.
 
 On Cloudflare, bind a KV namespace:
 
@@ -124,27 +133,24 @@ A single Node process needs none of this, since there is only one copy.
 
 ### What KV does and does not buy you
 
-It is worth being exact here, because the obvious reading is wrong. KV does not
-hand the write to every instance at once. Reads are served from a cache at the
-reading colo whose TTL cannot be set below 60 seconds, so an instance that read
-the key just before your webhook landed can go on seeing the old value for up to
-a minute.
+The obvious reading is wrong, so it is worth being exact. KV does not hand the
+write to every instance at once. Reads come from a cache at the reading colo
+whose TTL cannot go below 60 seconds, so an instance that read the key just
+before your webhook landed can serve the old value for up to a minute.
 
-So the poller, not KV, is what bounds how far behind an instance can be: with the
-default `mintState.ttlSeconds` of 10, nobody is more than about ten seconds late.
-KV takes the common case below that and can never make it worse, because the mark
-only rises. Binding it is worth doing; expecting it to be instant is not.
-
-True instant sharing needs a single coordination point rather than a cache, which
-on Cloudflare means a Durable Object. This repository does not use one: it is a
-dependency and a deployment step, and the poller already bounds the delay.
+The poller, not KV, is therefore what bounds how far behind an instance can be:
+at the default `ttlSeconds` of 10, nobody is more than about ten seconds late. KV
+takes the common case below that and can never make it worse, because the mark
+only rises. Binding it is worth doing. Expecting it to be instant is not, and
+that would need a single coordination point rather than a cache, which on
+Cloudflare means a Durable Object this repository deliberately does not carry.
 
 KV allows about one write per second per key, and a fast mint raises the mark
-faster than that, so writes are coalesced: only the newest value is written, and
-the ones it skipped are superseded by it. If KV is unreachable the delivery still
-succeeds, because the reveal itself comes from the instance's own copy of the
-mark, and the value is kept for the next write rather than dropped. `/status`
-reports the failure under `mintState.lastError`.
+faster than that, so writes are coalesced: only the newest value lands, and it
+supersedes the ones it skipped. If KV is unreachable the delivery still succeeds,
+because the reveal comes from the instance's own mark, and the value is kept for
+the next write rather than dropped. `/status` reports the failure under
+`mintState.lastError`.
 
 ## Checking it is working
 

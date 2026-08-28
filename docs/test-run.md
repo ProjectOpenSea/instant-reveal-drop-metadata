@@ -1,19 +1,15 @@
 # Doing a test run first
 
-Worth an hour before a real mint. Watching a token go from hidden to revealed is
-the only way to be sure every piece lines up.
-
-Nothing here needs a hosting account. The server runs on your machine, exposed
-through a Cloudflare quick tunnel.
+> An hour with a throwaway drop, start to finish, on your own machine through a
+> tunnel. Watching one token go from hidden to revealed is the only way to be
+> sure every piece lines up.
 
 ## What you need
 
 A test drop you control, on a testnet or a cheap mainnet one you do not mind
 existing. What matters is that you own the contract, so you can call
-`setBaseURI`, and that it has not minted out.
-
-Leave it unrevealed in OpenSea Studio, the normal pre-reveal state: `baseURI` set
-to a single placeholder URI with no trailing slash.
+`setBaseURI`, and that it has not minted out. Leave it unrevealed in OpenSea
+Studio, the normal pre-reveal state.
 
 ## 1. Point the config at your test drop
 
@@ -29,14 +25,13 @@ maxSupply: 10,
 
 ## 2. Make some metadata
 
-Real metadata if you have it, otherwise the four samples in `metadata/example/`:
+Real metadata if you have it, otherwise copy the four samples in
+`metadata/example/` into `metadata/` and duplicate them up to ten files, so every
+token has something to reveal.
 
 ```bash
-npm run build:manifest -- --dir metadata/example
+npm run build:manifest
 ```
-
-For a ten token test, copy those four into `metadata/` and duplicate them up to
-ten files so every token has something to reveal.
 
 ## 3. Check against the live contract
 
@@ -45,8 +40,9 @@ export RPC_URL="https://base-sepolia.g.alchemy.com/v2/YOUR_KEY"
 npm run preflight
 ```
 
-It prints the current `totalSupply`, whether `maxSupply` matches your config,
-which wallet owns the contract, and the current `baseURI`.
+It prints how many tokens are minted, whether `maxSupply` matches your config,
+which wallet owns the contract, the current `baseURI`, and whether burns can hide
+a token on this contract.
 
 ## 4. Run the server and expose it
 
@@ -78,32 +74,29 @@ From the wallet that owns the drop, with the trailing slash:
 ```bash
 cast send 0xYourTestDrop "setBaseURI(string)" "https://....trycloudflare.com/" \
   --rpc-url $RPC_URL --private-key $YOUR_KEY
-```
-
-Confirm the contract agrees:
-
-```bash
 cast call 0xYourTestDrop "tokenURI(uint256)(string)" 1 --rpc-url $RPC_URL
 ```
 
-That should print your tunnel URL with `1` on the end. Without the `1`, the
-trailing slash is missing.
+The second command should print your tunnel URL with `1` on the end. Without the
+`1`, the trailing slash is missing.
 
 ## 6. Mint, and watch
 
-Keep an eye on the terminal running `npm run dev`. Before the mint:
+Keep an eye on the terminal running `npm run dev`:
 
 ```
   GET /5  200  unminted   1ms
 ```
 
-Mint token 5 through Studio, or directly. Within `ttlSeconds` (10 by default):
+Mint token 5 through Studio, or directly. Within `ttlSeconds`, 10 by default:
 
 ```
   GET /5  200  minted     94ms
 ```
 
-Then look at it the way a buyer would:
+Then look at it the way a buyer would. Token 5 should be your real metadata with
+a long `immutable` cache lifetime; token 6, still unminted, the placeholder with
+`max-age=0`.
 
 ```bash
 curl -s https://....trycloudflare.com/5 | head -20
@@ -111,20 +104,16 @@ curl -sI https://....trycloudflare.com/5 | grep -i cache-control
 curl -sI https://....trycloudflare.com/6 | grep -i -e cache-control -e x-reveal-state
 ```
 
-Token 5 should be your real metadata with a long `immutable` cache lifetime.
-Token 6, still unminted, should be the placeholder with `max-age=0`.
-
 ## 7. Check what OpenSea shows
 
-OpenSea reads `tokenURI` when it indexes the mint, so a freshly minted token
-arrives already revealed. Tokens minted before you turned the server on were
-indexed against the placeholder and need a nudge:
+A freshly minted token arrives already revealed, because OpenSea reads `tokenURI`
+when it indexes the mint. Tokens minted before you turned the server on were
+indexed against the placeholder and need a nudge, which is queued rather than
+instant:
 
 ```bash
 OPENSEA_API_KEY=... npm run refresh -- --from 1 --to 10
 ```
-
-Refreshes are queued rather than instant.
 
 ## 8. Optional, try the webhook
 
@@ -132,7 +121,6 @@ The difference between a reveal in ten seconds and one in a second. Fake a
 delivery to see the path work, without setting up a provider:
 
 ```bash
-# restart the server with a secret set
 WEBHOOK_SECRET=test-secret npm run dev
 ```
 
@@ -144,17 +132,14 @@ curl -X POST https://....trycloudflare.com/webhook/mint \
 curl -sI https://....trycloudflare.com/7 | grep -i x-reveal-state
 ```
 
-Token 7 reads as `minted` immediately, without the server asking the chain. For a
-real Alchemy webhook see [webhooks.md](webhooks.md).
-
-A webhook can only bring a reveal forward, so a test delivery for a token that
-has not really minted stays revealed until you restart the server. Only do this
-on a test drop.
+Token 7 reads as `minted` immediately, without the server asking the chain. A
+webhook can only bring a reveal forward, so a test delivery for a token that has
+not really minted stays revealed until you restart the server. Only do this on a
+test drop. For a real Alchemy webhook see [webhooks.md](webhooks.md).
 
 ## 9. Put the test drop back
 
-To keep a mainnet test drop tidy, set `baseURI` back to whatever it was, or to
-the real IPFS directory:
+Set `baseURI` back to whatever it was, or to the real IPFS directory:
 
 ```bash
 cast send 0xYourTestDrop "setBaseURI(string)" "ipfs://<cid>/" \
@@ -171,8 +156,7 @@ contract still points at the old one. Re-run `setBaseURI` or use a real
 deployment.
 
 A metadata set smaller than the drop. Tokens past the end of your set mint and
-then sit on the placeholder forever, reported as `metadata-missing` in
-`x-reveal-state` and as a problem at `/status`.
+then sit on the placeholder forever, reported as `metadata-missing`.
 
 A cold start. The first request after the server starts pays one RPC round trip,
 a second or two. Everything after that comes from memory until the TTL expires.

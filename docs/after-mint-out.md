@@ -1,5 +1,8 @@
 # After your drop mints out
 
+> Handing the collection back to IPFS, publishing the seed, and what to check
+> before you switch the server off.
+
 You do not have to keep this running forever. Once every token is minted there is
 nothing left to hide, so the sensible end state is the normal one: a pinned IPFS
 directory with the contract pointing at it.

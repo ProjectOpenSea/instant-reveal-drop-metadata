@@ -16,9 +16,9 @@ anything.
 For plenty of drops that is the right answer, and this repository is not for
 them. The reason most drops delay a reveal is sniping: a public metadata
 directory tells anyone that token 412 is the good piece, and SeaDrop hands out
-IDs in order, so watching `totalSupply` climb is enough to mint at exactly the
-right moment. Delayed reveal removes that, at the cost of the thing everyone
-wants, which is seeing what they got.
+IDs in order, so watching the supply climb is enough to mint at exactly the right
+moment. Delayed reveal removes that, at the cost of the thing everyone wants,
+which is seeing what they got.
 
 This server gives you both. Minters see their token seconds after minting, and
 there is no published mapping to time a transaction against.
@@ -40,25 +40,13 @@ there is no published mapping to time a transaction against.
      |<-------------------- placeholder, not minted yet ---------|
 ```
 
-Which artwork a token gets is decided before the mint opens, by token ID alone,
-so a reorg can reveal a token a few seconds early but can never hand someone the
-wrong piece. The server fails closed: if it cannot reach the chain or its
-metadata, it serves the placeholder. Failures make reveals late, never early.
-
-## What this hides, and what it does not
-
-It hides which token ID gets which artwork, for tokens that have not minted.
-
-It does not hide the artwork itself, so your images can sit on public IPFS as
-normal: an image alone does not say which token ID it belongs to. It does not
-hide the rarity distribution either, because anyone can count the traits of what
-has minted and work out what is left, which is true of any reveal scheme. And it
-cannot un-reveal something. Once a token mints its metadata is public.
-
-To let holders check that you did not quietly reorder the good pieces, turn on
-the optional shuffle: publish a hash of your metadata set and a commitment to a
-secret seed before minting, then publish the seed afterwards. See
-[docs/security.md](docs/security.md).
+It hides which token ID gets which artwork, for tokens that have not minted. Not
+the artwork itself, so your images can sit on public IPFS as normal. Which token
+gets which piece is fixed before the mint opens, by token ID alone, so a reorg
+can reveal a token a few seconds early but never hand someone the wrong one, and
+the server fails closed, so failures make reveals late rather than early.
+[docs/security.md](docs/security.md) has the full picture: what it deliberately
+does not hide, and how holders can verify you did not reorder the good pieces.
 
 ## Quick start
 
@@ -84,7 +72,7 @@ live contract, run it, and deploy:
 ```bash
 npm run preflight
 npm run dev            # then open http://localhost:8787/1 and /status
-npx wrangler deploy    # docs/deploy.md covers the other options
+npm run deploy         # Cloudflare. docs/deploy.md covers the other options
 ```
 
 Point the contract at it, from the wallet that owns the drop. The trailing slash
@@ -107,20 +95,13 @@ npm run preflight -- --url https://your-worker.workers.dev
 
 ## How fast is the reveal
 
-A reveal lands within `mintState.ttlSeconds` of the mint, 10 seconds by default.
-The server reads `totalSupply()` at most once per window however much traffic it
-gets, so a busy mint costs about six RPC calls a minute.
+Within `mintState.ttlSeconds` of the mint, 10 seconds by default. The server
+makes at most one chain read per window however much traffic it gets, so a busy
+mint costs about six RPC calls a minute.
 
-For about a second instead, point a webhook at it. Alchemy is supported directly
-with signature verification, and there is a provider agnostic route for anything
-else. Polling keeps running underneath, so a missed delivery costs nothing. See
+Point a webhook at it for about a second instead. Polling keeps running
+underneath, so a missed delivery costs nothing. See
 [docs/webhooks.md](docs/webhooks.md).
-
-```bash
-curl -X POST https://your-worker.workers.dev/webhook/mint \
-  -H "Authorization: Bearer $WEBHOOK_SECRET" \
-  -d '{"tokenIds": [41]}'
-```
 
 ## After your drop mints out
 
@@ -138,9 +119,9 @@ cast send <your contract> "setBaseURI(string)" "ipfs://<cid>/"
 ## What it costs
 
 Nothing, for most drops. No database and no storage bill: your metadata is
-compiled into the deployment, and the only outbound traffic is a `totalSupply`
-read every few seconds. Cloudflare's free plan covers 100,000 requests a day,
-more than a normal drop generates, and Vercel's hobby plan is comparable.
+compiled into the deployment, and the only outbound traffic is one chain read
+every few seconds. Cloudflare's free plan covers 100,000 requests a day and
+Vercel's hobby plan is comparable.
 
 ## Endpoints
 
@@ -160,7 +141,7 @@ decided and why: `minted`, `unminted`, `reveal-all`, `reveal-none`,
 
 ## Documentation
 
-- [How it works](docs/how-it-works.md), in more detail than the diagram above
+- [How it works](docs/how-it-works.md), the mechanism and the cache rules
 - [Deploying](docs/deploy.md), including a free option with no account anywhere
 - [Doing a test run first](docs/test-run.md)
 - [Webhooks](docs/webhooks.md)
@@ -179,21 +160,14 @@ disagree about what passing means:
 npm run ci
 ```
 
-That is lint and format, typecheck, the tests, and the two checks below, in that
-order. The pieces run on their own too:
+Lint and format, typecheck, the tests, then two guards: `check:worker`, that
+nothing under `src/` picked up an API Cloudflare Workers cannot provide, and
+`check:privacy`, that no unrevealed metadata is staged. CI runs it on the minimum
+supported Node rather than the newest, so a change that breaks the version this
+README tells you to install cannot pass.
 
-```bash
-npm run lint          # biome, lint and format together (`lint:fix` applies)
-npm run typecheck
-npm test              # no network, no chain
-npm run check:worker  # the shared code still bundles for Cloudflare Workers
-npm run check:privacy # no unrevealed metadata staged or committed
-```
-
-`check:worker` matters because every test runs on Node. It is the only thing
-that notices when something under `src/` picks up an API Workers cannot provide,
-which would pass tests and typecheck and then fail on the recommended deploy
-target.
+[AGENTS.md](AGENTS.md) has the rest: architecture, the invariants, and what to
+check before a PR.
 
 ## Support
 

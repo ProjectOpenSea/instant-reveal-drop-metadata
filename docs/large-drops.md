@@ -1,5 +1,9 @@
 # Large drops
 
+> Where to put the metadata once it stops fitting in the deployment, and the two
+> costs that scale with drop size: RPC calls and the shuffle. This page owns the
+> three `metadata.source` options.
+
 The default setup compiles your metadata into the deployment, which is right up
 to a few thousand tokens and stops being right somewhere above that.
 
@@ -11,12 +15,9 @@ note  compressed     412 KB (what counts against a Workers bundle limit)
 ```
 
 The compressed number is what matters. Cloudflare's worker bundle limit is 3 MB
-free and 10 MB paid. Metadata JSON compresses well, often ten to one, so a 10,000
-token set frequently still fits. The build script warns at 70 percent of the free
-limit and fails past it.
-
-Vercel and a plain Node process have no comparable limit, so bundling a large set
-there is only a question of memory.
+free and 10 MB paid, and metadata JSON compresses about ten to one, so a 10,000
+token set often still fits. The build warns at 70 percent of the free limit and
+fails past it. Vercel and a plain Node process have no comparable limit.
 
 ## Option 1, Cloudflare R2
 
@@ -78,7 +79,7 @@ METADATA_HTTP_AUTHORIZATION=Bearer some-token
 
 A private S3 or GCS bucket, or a small origin of your own, both work. A public
 IPFS gateway does not: if the set is publicly readable and the shuffle is off,
-the gating stops meaning anything. See [security.md](security.md).
+the gating stops meaning anything ([security.md](security.md)).
 
 ## Option 3, keep bundling but shrink the JSON
 
@@ -87,9 +88,9 @@ token `external_url` values, are usually most of the bytes.
 
 ## RPC load at scale
 
-Independent of metadata size. The default `sequential` mode makes one
-`totalSupply()` call per TTL window, whatever your traffic, so a 10,000 token
-drop costs the same as a 100 token one: roughly six calls a minute.
+Independent of metadata size. The default `sequential` mode makes one chain read
+per TTL window, whatever your traffic, so a 10,000 token drop costs the same as a
+100 token one: roughly six calls a minute.
 
 `ownerOf` mode does scale with distinct tokens requested, one call each, cached
 permanently once positive. For a large drop indexed by several marketplaces at
@@ -99,11 +100,9 @@ genuinely mints out of order.
 ## Cold starts
 
 A serverless instance that has just started knows nothing, so its first request
-waits for one RPC round trip, typically under a second. Later requests come from
-memory, and each instance pays that once.
-
-With a KV store bound, new instances read the shared high water mark instead,
-which removes most of the cold start cost. See [webhooks.md](webhooks.md).
+waits for one RPC round trip, typically under a second, and each instance pays
+that once. With a KV store bound, a new instance can read the shared high water
+mark instead. See [webhooks.md](webhooks.md).
 
 ### The shuffle, on a very large drop
 

@@ -1,5 +1,9 @@
 # How it works
 
+> The mechanism: what the contract does, how the server decides whether a token
+> is minted, and which responses may be cached. This page owns those three
+> topics, and the others link here rather than repeat them.
+
 ## The contract side
 
 OpenSea Studio deploys ERC721A based SeaDrop contracts. Their `tokenURI` does
@@ -24,7 +28,9 @@ Three consequences:
 A `baseURI` ending in a slash is what "revealed" means to the contract. It then
 appends the decimal token ID with no file extension, so `tokenURI(41)` is
 `https://you.example/41`. That is why this server serves `/41` and not
-`/41.json`, though it accepts both.
+`/41.json`, though it accepts both. Leaving the slash off is the most common
+mistake with this setup, and it is not a malfunction: it is exactly how a
+pre-reveal drop is configured.
 
 The contract does not care whether the base URI is `ipfs://` or `https://`.
 Nothing changes onchain except the string.
@@ -37,44 +43,55 @@ cast call <contract> "tokenURI(uint256)(string)" 999999 --rpc-url $RPC_URL
 ```
 
 That last point is why the gating has to live in the server. The contract already
-refuses to name a URI for an unminted token, but your server is plain HTTP that
-anyone can request directly. If it answered `GET /412` with real metadata, a
-sniper would skip the contract and read the server. So the server checks for
-itself, every time.
+refuses to name a URI for an unminted token, but the server is plain HTTP anyone
+can request directly, and a sniper would simply skip the contract and read it. So
+the server checks for itself, every time.
 
 ## The reveal decision
 
 For each request the server answers one question: does this token exist onchain?
 
-`mintState.mode: "sequential"` is the default and reads `totalSupply()`. SeaDrop
-mints IDs in order, so one number settles every token: with `tokenIdStart: 1` and
-a supply of 240, tokens 1 through 240 are minted and 241 upward are not. One RPC
-call per TTL window answers every request in that window, so cost does not grow
-with traffic.
+### sequential, the default
 
-`mintState.mode: "ownerOf"` reads `ownerOf(tokenId)` per token, which reverts for
-an unminted one. Use it if your contract can mint IDs out of order, for example a
-custom mint function or an airdrop of high IDs. It costs one call per token, and
-positive answers are cached permanently because a minted token never unmints.
+SeaDrop mints IDs in order, so one number settles every token: with
+`tokenIdStart: 1` and 240 minted, tokens 1 through 240 exist and 241 upward do
+not. One chain read per TTL window answers every request in that window, so cost
+does not grow with traffic.
+
+Which read it makes matters more than it looks. `totalSupply()` on ERC721A is
+minted minus burned, so one burn during the mint would park the highest minted
+token on the placeholder until another mint replaced it, and permanently if the
+drop never mints out. The server prefers `getMintStats(address)`, whose second
+return value is ERC721A's `_totalMinted()`, which burns do not lower. It probes
+for that once and falls back to `totalSupply()` on a contract without it.
+`/status` reports which one under `mintState.supplyReader`, and
+`npm run preflight` says so before you go live.
+
+### ownerOf
+
+Reads `ownerOf(tokenId)` per token, which reverts for an unminted one. Use it if
+your contract can mint IDs out of order, for example a custom mint function or an
+airdrop of high IDs. Positive answers are cached permanently, because a minted
+token never unmints.
 
 One call per token also means one inbound request can become one RPC call, so
-anything that walks your token range once, a scraper or a marketplace reindexing
-the collection, spends your RPC budget at whatever rate it likes. At most 64 of
-those reads run at a time; past that the server answers without asking the chain,
-which withholds the token and sets `x-reveal-state: throttled`. A late reveal is
-the right side to be wrong on. `/status` counts them under
-`mintState.throttledChecks`, separately from errors, because declining a read is
-a decision rather than a fault. `sequential` mode never reaches this, since one
-read answers every token.
+anything that walks your range once, a scraper or a marketplace reindexing the
+collection, spends your RPC budget at whatever rate it likes. At most 64 of those
+reads run at a time; past that the server answers without asking the chain, which
+withholds the token and sets `x-reveal-state: throttled`, because a late reveal
+is the right side to be wrong on. `/status` counts them under
+`mintState.throttledChecks`, separately from errors, since declining a read is a
+decision rather than a fault. `sequential` mode never reaches this.
 
-Both modes keep a high water mark that only rises. A burn lowers `totalSupply`,
-and RPC providers behind a load balancer sometimes answer from an older block, so
-without that rule a token could flip back to unrevealed after being revealed.
+### What both modes guarantee
 
-When a read fails, the answer is the placeholder and the `x-reveal-state` header
-says `rpc-unavailable` rather than `unminted`, so an outage is visible rather
-than looking like a drop that has not sold. The failing endpoint is then left
-alone for a couple of seconds instead of being retried on every request.
+A high water mark that only rises, so an RPC node answering from an older block
+cannot un-reveal a token a buyer has seen.
+
+A failed read serves the placeholder and sets `x-reveal-state: rpc-unavailable`
+rather than `unminted`, so an outage is visible instead of looking like a drop
+nobody is buying. The failing endpoint is then left alone for a couple of seconds
+rather than retried on every request.
 
 ## The mapping
 
@@ -87,19 +104,21 @@ index    = shuffle ? permutation[position] : position
 token 1 gets your first file. With it on, a secret seed decides, and the mapping
 is still fixed before the mint opens.
 
-Nothing about this depends on mint order, buyer, or time. Given a token ID, the
-answer was determined before anyone minted anything, which is what makes the
-scheme safe against reorgs and easy to verify afterwards.
+Nothing here depends on mint order, buyer, or time. Given a token ID, the answer
+was determined before anyone minted anything, which is what makes the scheme safe
+against reorgs and verifiable afterwards. [security.md](security.md) covers why
+you might want the shuffle, [verify-a-shuffle.md](verify-a-shuffle.md) how to
+check one.
 
 ## The cache rules
 
 | Response | `Cache-Control` |
 | --- | --- |
 | Revealed token | `public, max-age=31536000, s-maxage=31536000, immutable` |
-| Unrevealed token, throttled or `rpc-unavailable` included | `public, max-age=0, s-maxage=0, must-revalidate` |
+| Unrevealed token, throttled and `rpc-unavailable` included | `public, max-age=0, s-maxage=0, must-revalidate` |
 | Minted but no metadata | `no-store` |
 | Anything that errored | `no-store` |
-| `/status` | `no-store` |
+| `/status`, `/health`, and the index page | `no-store` |
 
 A revealed token never changes, so it is safe to cache forever. An unrevealed one
 stops being true the moment the token mints, so nothing may cache it. Getting
@@ -108,22 +127,23 @@ and a CDN keeps handing them the placeholder.
 
 `npm run preflight -- --url https://your-server` checks both.
 
+## Failing closed
+
+Every failure path ends the same way: serve the placeholder, refuse to let
+anything cache it, name the reason in `x-reveal-state`. An unreachable chain, a
+502 from a metadata source, unparseable JSON in a bucket, a missing shuffle seed.
+None of them produce a 500, which would leave a marketplace recording a broken
+token, and none produce real metadata for a token that has not minted.
+
+An outage therefore costs you a late reveal, which is recoverable, instead of an
+early one, which is not.
+
 ## Where the metadata lives
 
-The server needs to read your metadata while the public cannot. Three options,
-set with `metadata.source`:
-
-`bundled` compiles your files into the deployment with `npm run build:manifest`.
-Nothing external to set up, and nothing else that can be down during your mint.
-Right for most drops. Cloudflare caps a compressed worker bundle at 3 MB on the
-free plan, so see [large-drops.md](large-drops.md) above a few thousand tokens.
-
-`r2` reads from a private Cloudflare R2 bucket, one object per position. Right for
-large sets, and it keeps your metadata out of git entirely.
-
-`http` reads from a private base URL you control, with an optional
-`Authorization` header. A public IPFS gateway is not a private base URL: if your
-set is pinned publicly and the shuffle is off, the gating becomes decorative.
+Three options, set with `metadata.source`. `bundled` compiles your files into the
+deployment and is right for most drops, `r2` reads a private Cloudflare R2
+bucket, `http` reads a private base URL you control. Sizes, trade-offs and setup
+are in [large-drops.md](large-drops.md).
 
 ## What runs where
 

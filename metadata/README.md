@@ -1,5 +1,8 @@
 # Your metadata goes here
 
+> How to name and lay out your metadata files, and what the build refuses to
+> guess. This page owns the naming rules.
+
 Put one JSON file per token in this directory, named by position:
 
 ```
@@ -30,11 +33,19 @@ Either way, renaming files between builds changes which artwork a token gets, so
 settle on an order before publishing anything.
 
 Because that order cannot be corrected once tokens are minted,
-`npm run build:manifest` refuses to guess it. It stops if two files claim the
-same position (`1.backup.json` next to `1.json`), if a number is missing from
-the run, or if any file is not named for a position. Use `manifest.json` when
-you want to state the order explicitly instead. The build also prints which file
-became which token, which is worth a glance before you deploy.
+`npm run build:manifest` refuses to guess it. It stops when:
+
+- two files claim the same position, such as `1.backup.json` next to `1.json`
+- a number is missing from the run, which shifts everything after it
+- a file is not named for a position at all, like `art-10.json`, which sorts
+  before `art-2.json` as text
+- the set does not start at 0 or 1, such as `5.json` through `1004.json`, which
+  has no gaps and the right number of entries and would still put the wrong
+  artwork on every token
+
+Use `manifest.json` when you want to state the order explicitly instead. The
+build also prints which file became which token, which is worth a glance before
+you deploy.
 
 ## What goes in a file
 
@@ -56,9 +67,10 @@ Full field reference: https://docs.opensea.io/docs/metadata-standards
 
 ## Where your images should live
 
-On IPFS, pinned, exactly as normal. Images are fine to make public before the
-mint: an image alone does not say which token ID it belongs to. The server
-withholds the mapping, not the artwork.
+On IPFS, pinned, exactly as normal, and they are fine to make public before the
+mint. The server withholds the mapping, not the artwork; see
+[docs/security.md](../docs/security.md#what-it-does-not-hide) for why that is
+enough.
 
 If your metadata files use relative image paths, set `metadata.imageBaseUri` in
 `drop.config.ts` and the server will prefix them.
@@ -66,14 +78,10 @@ If your metadata files use relative image paths, set `metadata.imageBaseUri` in
 ## This directory is gitignored
 
 Deliberately, so your unrevealed set does not end up in a public repository.
-
 `npm run build:manifest` copies the same data into `src/generated/manifest.ts`,
-which cannot be ignored because the deployment needs it. So that file is guarded
-instead: `npm run check:privacy` fails if it is staged or committed with entries
-in it, it runs in CI, and `build:manifest` installs it as a pre-commit hook. Use
-`metadata.source: "r2"` to keep metadata out of git entirely, or
-`ALLOW_METADATA_IN_GIT=1` if your repository is private and staying that way. See
-`docs/security.md`.
+which cannot be ignored because the deployment needs it, so that file is guarded
+by `npm run check:privacy` instead. How the guard works and how to opt out are in
+[docs/security.md](../docs/security.md#the-mistake-to-avoid).
 
 `metadata/example/` holds four sample files for trying things out:
 
