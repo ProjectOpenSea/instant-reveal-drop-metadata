@@ -9,7 +9,8 @@
  *                           against ALCHEMY_WEBHOOK_SIGNING_KEY
  *   POST /webhook/mint      any other provider, or your own script. Send
  *                           `Authorization: Bearer $WEBHOOK_SECRET` and a body
- *                           of {"tokenIds":[1,2,3]} or {"revealedThrough":500}
+ *                           of {"tokenIds":[1,2,3]}, or {"revealedThrough":500}
+ *                           on a "sequential" drop
  *
  * A webhook can only ever say "this token exists now". It cannot hide a token,
  * cannot lower the high water mark, and is not required for correctness: the
@@ -126,6 +127,25 @@ async function handleGeneric(request: Request, runtime: Runtime, env: Env): Prom
 
   // "revealedThrough" is a convenience for an indexer that tracks supply
   // rather than individual mints: everything up to this ID is minted.
+  //
+  // It works by raising the high water mark, and only sequential mode reads
+  // one. ownerOf mode asks the chain about each token ID separately, precisely
+  // because a drop configured that way cannot assume the IDs below a number
+  // exist. Accepting the field there would reveal token n and quietly drop the
+  // "through" part, which is a wrong answer that looks like a successful
+  // delivery, so refuse it and say what to send instead.
+  if (payload.revealedThrough !== undefined && runtime.config.mintState.mode === "ownerOf") {
+    return {
+      status: 400,
+      body: {
+        error:
+          'revealedThrough needs mintState.mode "sequential", and this drop is "ownerOf". ' +
+          "That mode makes no assumption that the token IDs below a number are minted, so " +
+          "send the individual ids as tokenIds: [..] instead.",
+      },
+    };
+  }
+
   const through = parseTokenId(payload.revealedThrough);
   if (through !== null) tokenIds.push(through);
 
