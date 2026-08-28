@@ -13,28 +13,27 @@
 
 import type { ResolvedConfig, TokenMetadata } from "../config.ts";
 import type { Env } from "../env.ts";
-import { type MetadataSource, renderPath } from "./index.ts";
+import { createIndexLoader, type MetadataSource, renderPath } from "./index.ts";
 
 export function createR2Source(config: ResolvedConfig, env: Env): MetadataSource {
   const bucket = env.METADATA_BUCKET;
   const template = config.metadata.pathTemplate;
 
-  // Positive results are immutable, so one read per token per isolate is enough.
-  const cache = new Map<number, TokenMetadata>();
+  // Positive results are immutable, so one read per token per isolate is enough,
+  // and the loader makes that one read serve the whole burst rather than each
+  // request in it starting its own.
+  const load = createIndexLoader<TokenMetadata>(async (index) => {
+    if (!bucket) return null;
+    const object = await bucket.get(renderPath(template, index));
+    if (!object) return null;
+    return JSON.parse(await object.text()) as TokenMetadata;
+  });
 
   return {
     kind: "r2",
     async get(index: number) {
       if (!bucket) return null;
-      const cached = cache.get(index);
-      if (cached) return cached;
-
-      const object = await bucket.get(renderPath(template, index));
-      if (!object) return null;
-
-      const parsed = JSON.parse(await object.text()) as TokenMetadata;
-      cache.set(index, parsed);
-      return parsed;
+      return load(index);
     },
     size() {
       return null;

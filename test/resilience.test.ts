@@ -56,6 +56,57 @@ describe("a metadata source that fails", () => {
   });
 });
 
+describe("a burst of requests for one token", () => {
+  it("makes one upstream metadata call, not one per request", async () => {
+    // Every marketplace and wallet watching the contract asks the moment a
+    // token reveals, and they all miss the empty cache together. Caching only
+    // the settled value sends that whole first wave upstream in parallel.
+    const { runtime, chain } = makeRuntime({ chain: { totalSupply: 5 } });
+
+    const responses = await Promise.all(
+      Array.from({ length: 50 }, () => handleRequest(get("/3"), runtime)),
+    );
+
+    assert.equal(chain.metadataCalls, 1, `made ${chain.metadataCalls} metadata calls`);
+    for (const response of responses) {
+      assert.equal(response.headers.get("x-reveal-state"), "minted");
+    }
+  });
+
+  it("retries after a failure rather than caching it", async () => {
+    // A bad gateway is a moment, not a fact about the index. Keeping the
+    // rejected load would turn one blip into a permanent placeholder.
+    const { runtime, chain } = makeRuntime({
+      chain: { totalSupply: 5, metadataDown: true },
+    });
+
+    const first = await handleRequest(get("/3"), runtime);
+    assert.equal(first.headers.get("x-reveal-state"), "error");
+
+    chain.metadataDown = false;
+    const second = await handleRequest(get("/3"), runtime);
+
+    assert.equal(second.headers.get("x-reveal-state"), "minted");
+  });
+
+  it("retries a file that was not uploaded yet", async () => {
+    // 404 means "nothing there right now", which is usually a file still being
+    // uploaded. Caching it would keep the token on the placeholder after the
+    // file appears.
+    const { runtime, chain } = makeRuntime({
+      chain: { totalSupply: 5, metadataMissing: [2] },
+    });
+
+    const first = await handleRequest(get("/3"), runtime);
+    assert.equal(first.headers.get("x-reveal-state"), "metadata-missing");
+
+    chain.metadataMissing = [];
+    const second = await handleRequest(get("/3"), runtime);
+
+    assert.equal(second.headers.get("x-reveal-state"), "minted");
+  });
+});
+
 describe("a shared store that fails", () => {
   it("still reveals the token a webhook delivered", async () => {
     const { runtime } = makeRuntime({

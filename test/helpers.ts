@@ -30,6 +30,8 @@ export type FakeChain = {
   metadataCalls: number;
   /** Make the metadata source return a server error, to check the fallback. */
   metadataDown: boolean;
+  /** Indexes the metadata source answers 404 for, as an unuploaded file would. */
+  metadataMissing: number[];
   /** Raw hex to answer `ownerOf` with, instead of a well formed word. */
   ownerOfRaw: string | null;
   /** Raw hex to answer `totalSupply` with, instead of a well formed word. */
@@ -152,6 +154,9 @@ export function makeFakeFetch(chain: FakeChain): FetchLike {
       if (!Number.isInteger(index) || index < 0 || index > 999) {
         return new Response("not found", { status: 404 });
       }
+      if (chain.metadataMissing.includes(index)) {
+        return new Response("not found", { status: 404 });
+      }
       return jsonResponse(
         {
           name: `Artwork ${index}`,
@@ -182,6 +187,7 @@ export function makeRuntime(
     rpcCalls: 0,
     metadataCalls: 0,
     metadataDown: false,
+    metadataMissing: [],
     ownerOfRaw: null,
     totalSupplyRaw: null,
     mintStatsRaw: null,
