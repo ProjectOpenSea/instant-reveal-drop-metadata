@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { handleRequest } from "../src/handler.ts";
 import { createKvRevealStore } from "../src/reveal-store.ts";
-import { get, makeBrokenStore, makeFakeKv, makeRuntime } from "./helpers.ts";
+import { get, makeBrokenStore, makeFakeKv, makeFlakyKv, makeRuntime } from "./helpers.ts";
 
 describe("a metadata source that fails", () => {
   it("serves the placeholder rather than a 500", async () => {
@@ -123,6 +123,46 @@ describe("the kv store", () => {
 
     assert.equal(kv.writes.at(-1), "51");
     assert.equal(await store.getHighWater(), 51);
+  });
+
+  it("does not drop a value whose write failed", async () => {
+    // The write window is consumed and `pending` cleared before the put, and
+    // `bumpHighWater` returns early for anything at or below the local mark.
+    // So without putting the value back, one failed write stops this instance
+    // publishing its mark for the rest of the mint, and nothing says so.
+    const kv = makeFlakyKv();
+    const store = createKvRevealStore(kv);
+
+    await assert.rejects(() => store.bumpHighWater(10));
+    assert.deepEqual(kv.writes, [], "the write failed, so nothing landed");
+
+    kv.failingWrites = false;
+    await new Promise((resolve) => setTimeout(resolve, 1_050));
+    await store.getHighWater();
+
+    assert.deepEqual(kv.writes, ["10"], "the parked value is written once KV recovers");
+  });
+
+  it("keeps the newer value when a bump lands during a failed write", async () => {
+    const kv = makeFlakyKv();
+    const store = createKvRevealStore(kv);
+
+    await assert.rejects(() => store.bumpHighWater(10));
+    kv.failingWrites = false;
+    await new Promise((resolve) => setTimeout(resolve, 1_050));
+    await store.bumpHighWater(20);
+
+    assert.deepEqual(kv.writes, ["20"], "20 supersedes the 10 that never landed");
+    assert.equal(await store.getHighWater(), 20);
+  });
+
+  it("reveals the token anyway, because the local mark is what answers", async () => {
+    const kv = makeFlakyKv();
+    const store = createKvRevealStore(kv);
+
+    await assert.rejects(() => store.bumpHighWater(10));
+
+    assert.equal(await store.getHighWater(), 10);
   });
 
   it("never lowers the mark", async () => {

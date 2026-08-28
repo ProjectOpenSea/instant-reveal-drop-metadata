@@ -108,8 +108,8 @@ probably have `tokenIdStart` wrong.
 ## Serverless hosts need one more step
 
 Cloudflare and Vercel run many independent copies of your code, and a delivery
-arrives at one of them. Without somewhere shared to write, the others find out on
-their next poll, which throws away most of the speed you set this up for.
+arrives at one of them. That copy reveals the token straight away. The others
+find out on their next poll unless you give them somewhere shared to look.
 
 On Cloudflare, bind a KV namespace:
 
@@ -122,11 +122,29 @@ Put the id in the `kv_namespaces` block of `wrangler.toml` and redeploy.
 
 A single Node process needs none of this, since there is only one copy.
 
+### What KV does and does not buy you
+
+It is worth being exact here, because the obvious reading is wrong. KV does not
+hand the write to every instance at once. Reads are served from a cache at the
+reading colo whose TTL cannot be set below 60 seconds, so an instance that read
+the key just before your webhook landed can go on seeing the old value for up to
+a minute.
+
+So the poller, not KV, is what bounds how far behind an instance can be: with the
+default `mintState.ttlSeconds` of 10, nobody is more than about ten seconds late.
+KV takes the common case below that and can never make it worse, because the mark
+only rises. Binding it is worth doing; expecting it to be instant is not.
+
+True instant sharing needs a single coordination point rather than a cache, which
+on Cloudflare means a Durable Object. This repository does not use one: it is a
+dependency and a deployment step, and the poller already bounds the delay.
+
 KV allows about one write per second per key, and a fast mint raises the mark
 faster than that, so writes are coalesced: only the newest value is written, and
 the ones it skipped are superseded by it. If KV is unreachable the delivery still
 succeeds, because the reveal itself comes from the instance's own copy of the
-mark. `/status` reports the write failure under `mintState.lastError`.
+mark, and the value is kept for the next write rather than dropped. `/status`
+reports the failure under `mintState.lastError`.
 
 ## Checking it is working
 

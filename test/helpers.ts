@@ -238,6 +238,27 @@ export function makeFakeKv(): KvLike & { writes: string[]; now: number } {
 }
 
 /**
+ * A KV namespace whose writes fail until `failingWrites` is turned off, so a
+ * value dropped by a failed write can be looked for afterwards.
+ */
+export function makeFlakyKv(): KvLike & { writes: string[]; failingWrites: boolean } {
+  const state = {
+    writes: [] as string[],
+    failingWrites: true,
+    value: null as string | null,
+    async get(_key: string): Promise<string | null> {
+      return state.value;
+    },
+    async put(_key: string, value: string): Promise<void> {
+      if (state.failingWrites) throw new Error("kv is having a moment");
+      state.writes.push(value);
+      state.value = value;
+    },
+  };
+  return state;
+}
+
+/**
  * A store that records nothing and fails every write, so a reveal that still
  * happens can only have come from the reader's own in-memory mark.
  */

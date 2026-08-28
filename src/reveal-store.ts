@@ -7,12 +7,31 @@
  * way that matters. Neither can ever lower it.
  *
  * Why a store at all: a serverless deployment runs many independent copies of
- * this code. A webhook arrives at exactly one of them. With the memory store
- * the other copies find out on their next poll, which is fine but wastes the
- * speed the webhook bought you. With the KV store they all see it at once.
+ * this code. A webhook arrives at exactly one of them. That copy reveals the
+ * token immediately, from its own mark; the question is how the others find
+ * out. With the memory store, on their next poll. With KV, sooner than that
+ * some of the time, and never later.
+ *
+ * "Sooner some of the time" is the honest claim, and it is worth being precise
+ * about because it decides whether KV is worth binding. KV reads are served
+ * from a cache at the reading colo, and `cacheTtl` has a floor of 60 seconds,
+ * so an instance that has already read the key can go on seeing the old value
+ * for up to a minute after the write. Same colo and same cache entry, a
+ * neighbour picks the write up quickly. A colo that cached the key a moment
+ * before the write does not, until that entry expires.
+ *
+ * So the poller is the cross-instance floor, not KV: with the default
+ * `mintState.ttlSeconds` of 10, no instance is more than about ten seconds
+ * behind whatever KV is doing. KV takes the common case below that, and cannot
+ * make anything worse, because the mark only ever rises.
+ *
+ * True instant sharing needs a single coordination point rather than a cache,
+ * which on Cloudflare means a Durable Object. That is a dependency and a
+ * deployment step this repository deliberately does not have, and the poller
+ * already bounds the delay, so it is a note rather than a plan.
  *
  *   memory  no setup, per-instance, fine for a single Node process
- *   kv      Cloudflare KV, shared across every instance
+ *   kv      Cloudflare KV, shared between instances within about a minute
  */
 
 export type KvLike = {
@@ -52,11 +71,13 @@ export function createMemoryRevealStore(): RevealStore {
 
 /**
  * Cloudflare KV. Reads are cached for a second inside each instance, so a busy
- * mint costs about one KV read per second per colo rather than one per request.
+ * mint costs about one KV read per second per instance rather than one per
+ * request. Behind that, KV serves reads from its own cache at the colo, whose
+ * TTL cannot be set below 60 seconds.
  *
  * KV is eventually consistent, which is the right trade here: a stale read is a
  * reveal that arrives a moment late, and the local high water mark and the
- * poller both cover it.
+ * poller both cover it. Nothing here waits on KV to reveal a token.
  *
  * Writes to one key are limited to about one a second, and a fast mint bumps the
  * mark faster than that, so writes are coalesced. A bump inside the window
@@ -78,7 +99,21 @@ export function createKvRevealStore(kv: KvLike): RevealStore {
     const value = pending;
     pending = null;
     lastWriteAtMs = now;
-    await kv.put(HIGH_WATER_KEY, String(value));
+
+    try {
+      await kv.put(HIGH_WATER_KEY, String(value));
+    } catch (error) {
+      // Park it again. `bumpHighWater` returns early for anything at or below
+      // the local mark, so a value dropped here is never re-parked by a later
+      // bump: one failed write and this instance stops publishing its mark
+      // entirely, silently, for the rest of the mint.
+      //
+      // A newer bump can have landed while the write was in flight, and that
+      // one supersedes this, so keep the higher of the two.
+      if (pending === null || value > pending) pending = value;
+      throw error;
+    }
+
     cached = { value, atMs: now };
   }
 

@@ -54,9 +54,13 @@ export type Env = {
   METADATA_BUCKET?: R2Like;
 
   /**
-   * Optional Cloudflare KV namespace. When bound, mint progress is shared
-   * across every instance of the worker, so a webhook that arrives at one of
-   * them reveals the token everywhere.
+   * Optional Cloudflare KV namespace. When bound, an instance publishes mint
+   * progress for the others to pick up, so a webhook that arrives at one of
+   * them usually reaches the rest sooner than their next poll would.
+   *
+   * Not instantly: KV serves reads from a per-colo cache with a 60 second
+   * floor, so the poller stays the cross-instance bound. See the note at the
+   * top of `reveal-store.ts`.
    */
   REVEAL_STATE?: KvLike;
 };
